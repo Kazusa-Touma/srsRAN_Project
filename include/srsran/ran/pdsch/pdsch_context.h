@@ -49,6 +49,8 @@ public:
   /// Gets the HARQ process identifier.
   harq_id_t get_h_id() const { return h_id; }
 
+  unsigned get_k1() const { return k1; }
+
   /// Gets if the PDSCH transmission is new.
   bool is_new_data() const { return nof_retxs == 0; }
 

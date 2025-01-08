@@ -49,6 +49,9 @@
 #include "srsran/phy/upper/sequence_generators/sequence_generator_factories.h"
 #include "srsran/srsvec/bit.h"
 #include "srsran/srsvec/zero.h"
+#include "srsran/support/timestamp_logger.h"
+#include "srsran/support/scheduler.h"
+#include <fmt/core.h>
 
 using namespace srsran;
 
@@ -1124,7 +1127,7 @@ public:
     data     = data_.front();
     pdu      = pdu_;
 
-    start = std::chrono::steady_clock::now();
+    start = std::chrono::system_clock::now();
     processor->process(mapper, *this, data_, pdu);
   }
 
@@ -1132,7 +1135,7 @@ private:
   void on_finish_processing() override
   {
     // Finish time measurement.
-    auto end = std::chrono::steady_clock::now();
+    auto end = std::chrono::system_clock::now();
 
     // Only print if it is allowed.
     if (enable_logging_broadcast || !is_broadcast_rnti(pdu.rnti)) {
@@ -1145,7 +1148,7 @@ private:
                      pdu.slot.slot_index(),
                      data.data(),
                      data.size(),
-                     "PDSCH: {:s} tbs={} {}\n  {:n}",
+                     "PDSCH: {:s} tbs={} {}\n  {:n}\n",
                      pdu,
                      data.size(),
                      time_ns,
@@ -1161,7 +1164,14 @@ private:
                     data.size(),
                     time_ns);
       }
+      DL_scheduler::getInstance().PDSCH_update(time_ns.count() / 1000);
+      TimestampLogger::getInstance().log_timestamp("PDSCH create time", 
+          std::chrono::duration_cast<std::chrono::microseconds>(start.time_since_epoch()).count(), 
+          "PDSCH finish time", 
+          std::chrono::duration_cast<std::chrono::microseconds>(end.time_since_epoch()).count());
+      TimestampLogger::getInstance().log_timestamp(fmt::format("{:s}", pdu) + " PDSCH time", time_ns.count(), data.size(), pdu.slot);
     }
+    //fmt::print("logging: {}\n", pdu);
 
     // Verify the notifier is valid.
     srsran_assert(notifier != nullptr, "Detected PDSCH processor notified twice.");
@@ -1180,7 +1190,7 @@ private:
   pdsch_processor_notifier*                          notifier;
   span<const uint8_t>                                data;
   pdu_t                                              pdu;
-  std::chrono::time_point<std::chrono::steady_clock> start;
+  std::chrono::time_point<std::chrono::system_clock> start;
 };
 
 class logging_prach_detector_decorator : public prach_detector

@@ -101,6 +101,7 @@ public:
                                         task_executor&                    async_task_executor,
                                         radio_notification_handler&       notifier) override
   {
+    fmt::print("{}\n", typeid(radio_factory_dynamic_wrapper).name());
     return std::make_unique<radio_dynamic_wrapper>(handle, factory->create(config, async_task_executor, notifier));
   }
 

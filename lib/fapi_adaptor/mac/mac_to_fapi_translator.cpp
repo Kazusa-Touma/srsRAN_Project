@@ -212,6 +212,10 @@ void mac_to_fapi_translator::on_new_downlink_scheduler_results(const mac_dl_sche
   }
 
   // Send the message.
+  if(!msg.pdus.empty() && !dl_res.dl_res->ue_grants.empty() && !dl_res.dl_res->ue_grants[0].pdsch_cfg.codewords.empty()){
+    auto &cw = msg.pdus[0].pdsch_pdu.cws.emplace_back();
+    cw.tb_size = units::bytes(dl_res.dl_res->ue_grants[0].pdsch_cfg.codewords[0].tb_size_bytes);
+  }
   msg_gw.dl_tti_request(msg);
 
   bool is_ul_dci_last_message_in_slot = !is_pdsch_pdu_present_in_dl_tti && is_ul_dci_present;

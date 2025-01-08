@@ -1,9 +1,9 @@
 #include <vector>
 
-class dl_thread_controller{
+class dl_thread_state{
 public:
-    static dl_thread_controller& getInstance(){
-        static dl_thread_controller instance;
+    static dl_thread_state& getInstance(){
+        static dl_thread_state instance;
         return instance;
     }
 
@@ -72,10 +72,10 @@ public:
     int finish_len = 0;
 };
 
-class pusch_thread_controller{
+class pusch_thread_state{
 public:
-static pusch_thread_controller& getInstance(){
-        static pusch_thread_controller instance;
+static pusch_thread_state& getInstance(){
+        static pusch_thread_state instance;
         return instance;
     }
 

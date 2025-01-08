@@ -22,7 +22,7 @@
 
 #include "pdu_rx_handler.h"
 #include "srsran/instrumentation/traces/up_traces.h"
-#include "../../du_high/adapters/timestamp_logger.h"
+#include "srsran/support/timestamp_logger.h"
 
 using namespace srsran;
 

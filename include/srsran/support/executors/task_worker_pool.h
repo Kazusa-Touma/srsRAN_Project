@@ -27,6 +27,8 @@
 #include "srsran/adt/mutexed_mpmc_queue.h"
 #include "srsran/support/executors/detail/priority_task_queue.h"
 #include "srsran/support/executors/task_executor.h"
+#include "srsran/support/scheduler.h"
+#include "srsran/support/thread_state.h"
 #include <condition_variable>
 #include <mutex>
 #include <fstream>
@@ -204,13 +206,17 @@ public:
   {
     if(this->pool_name.find("up_phy_dl") != std::string::npos){
       dl_logfile_stream.open("dl_result_DL.txt", std::ios::out);
-      startThread(check_status());
+      startThread(DL_scheduler::getInstance().check_status(
+        this->nof_workers(),
+        [this](unsigned i) { this->thread_force_sleep(i); },
+        [this](unsigned i) { this->thread_force_wake(i); }
+      ), "DL sched");
     }
     else if(this->pool_name.find("pusch") != std::string::npos){
       pusch_logfile_stream.open("pusch_result_UL.txt", std::ios::out);
-      startThread(check_status());
+      //startThread(check_status(), "PUSCH");
     }
-    stop_flag.store(false);
+    //stop_flag.store(false);
   }
   ~task_worker_pool();
 
@@ -252,21 +258,28 @@ public:
 
   void thread_force_wake(unsigned index);
 
-  void startThread(const std::function<void()>& check){
-    check_loop = std::thread(check);
+  void startThread(const std::function<void()>& check, const std::string& thread_name){
+    check_loop = std::thread([this, check, thread_name](){
+      cpu_set_t cpuset;
+      CPU_ZERO(&cpuset);
+      CPU_SET(10, &cpuset);
+      pthread_t thread = pthread_self();
+      pthread_setaffinity_np(thread, sizeof(cpu_set_t), &cpuset);
+      pthread_setname_np(thread, ("scheduler_" + thread_name).c_str());
+      
+      check();
+    });
   }
 
   std::fstream dl_logfile_stream;
   std::fstream pusch_logfile_stream;
 
-  std::atomic<bool> stop_flag;
+  //std::atomic<bool> stop_flag;
   std::thread check_loop;
-
-  //time_record recorder;
+  std::mutex write_mutex;
 
 private:
   std::function<void()> create_pop_loop_task();
-  std::function<void()> check_status();
 
   srslog::basic_logger& logger = srslog::fetch_basic_logger("ALL");
 };

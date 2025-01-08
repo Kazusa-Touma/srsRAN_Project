@@ -25,6 +25,7 @@
 #include "srsran/du/du_test_config.h"
 #include "srsran/mac/mac.h"
 #include "srsran/mac/mac_cell_result.h"
+#include "srsran/support/timestamp_logger.h"
 #include <unordered_map>
 #include <chrono>
 #include <istream>
@@ -34,6 +35,7 @@
 #include <vector>
 #include <string>
 #include <stdlib.h>
+#include <random>
 #include <math.h>
 static const unsigned TEST_UE_DL_BUFFER_STATE_UPDATE_SIZE = 1000000;
 
@@ -229,16 +231,16 @@ public:
   ~range_test_mode() {}
   unsigned min(unsigned x, unsigned y) { return x < y ? x : y; }
   double get_buffer_size() override {
-    if(first_called){
-      start_time = std::chrono::system_clock::now();
-      first_called = false;
-      return min_buffer_size;
-    }
-    std::chrono::system_clock::time_point current = std::chrono::system_clock::now();
-    std::chrono::duration<unsigned> running_duration = std::chrono::duration_cast<std::chrono::duration<unsigned>>(current - start_time);
-    return min(max_buffer_size,
-               min_buffer_size +  running_duration.count() / buffer_interval * buffer_step);
+  if(first_called){
+    start_time = std::chrono::system_clock::now();
+    first_called = false;
+    return min_buffer_size;
   }
+  std::chrono::system_clock::time_point current = std::chrono::system_clock::now();
+  std::chrono::duration<double, std::milli> running_duration = std::chrono::duration_cast<std::chrono::milliseconds>(current - start_time);
+  return min(max_buffer_size,
+             min_buffer_size + static_cast<unsigned>(running_duration.count()) / buffer_interval * buffer_step);
+}
 private:
   srs_du::du_test_config::test_ue_config test_ue;
   unsigned min_buffer_size, max_buffer_size, buffer_interval, buffer_step;
@@ -248,7 +250,7 @@ private:
 
 class trace_test_mode : public test_mode_buffer_size{
 public:
-  trace_test_mode(std::string CSV_filename){
+  trace_test_mode(std::string CSV_filename): gen((unsigned int) time(nullptr)){
     std::ifstream csv_data(CSV_filename, std::ios::in);
     std::string line;
     if (!csv_data.is_open()) {
@@ -265,7 +267,7 @@ public:
             if(turn == 1){
                 dl_brate_table.push_back(stod(word));
             }
-            turn = (turn + 1) % 4;
+            turn = (turn + 1) % 14;
         }
     }
     csv_data.close();
@@ -275,22 +277,27 @@ public:
   ~trace_test_mode() {}
 
   double get_buffer_size() override {
-    double ret = 7.537320046522576e-05 * dl_brate_table[counter] + 539.8745777874028;
+    double ret = 7.537320046522576e-02 * dl_brate_table[counter] + 539.8745777874028;
     if(first_called){
-      start_time = std::chrono::system_clock::now();
-      first_called = false;
+        start_time = std::chrono::system_clock::now();
+        first_called = false;
     }
     std::chrono::system_clock::time_point current = std::chrono::system_clock::now();
-    std::chrono::duration<unsigned> running_duration = std::chrono::duration_cast<std::chrono::duration<unsigned>>(current - start_time);
-    counter = (running_duration.count()) % total_num;
-    return ret;
-  }
+    std::chrono::duration<double, std::milli> running_duration = std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(current - start_time);
+    counter = static_cast<unsigned>(running_duration.count() / 50) % total_num;
+    std::normal_distribution<double> gauss(0.0, ret / 100);
+    auto noise = gauss(gen);
+    //fmt::print("DL is {}, noise is {}\n", ret, noise);
+    TimestampLogger::getInstance().log_timestamp("dl_buffer_size", ret + noise, dl_brate_table[counter], std::chrono::duration_cast<std::chrono::microseconds>(current.time_since_epoch()).count());
+    return ret + noise;
+}
 private:
   std::vector<double> dl_brate_table;
   unsigned counter;
   unsigned total_num;
   std::chrono::system_clock::time_point start_time;
   bool first_called = true;
+  std::mt19937 gen;
 };
 
 class mac_test_mode_adapter final : public mac_interface,

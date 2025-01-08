@@ -24,8 +24,11 @@
 
 #include "srsran/support/srsran_assert.h"
 #include "srsran/instrumentation/traces/du_traces.h"
-#include "../../du_high/adapters/timestamp_logger.h"
-#include "../../support/thread_controller.cpp"
+#include "srsran/support/timestamp_logger.h"
+#include "srsran/support/thread_state.h"
+#include "srsran/support/scheduler.h"
+#include <thread>
+#include <chrono>
 
 namespace srsran {
 
@@ -101,11 +104,13 @@ public:
     decrease_pending_pdus();
     bool flag = (state == states::finishing) && (pending_pdus == 0);
     if(flag) {
+        //std::this_thread::sleep_for(std::chrono::microseconds(1500));
+        DL_scheduler::getInstance().DL_update(finish_time - create_time);
         finish_time = std::chrono::duration_cast<std::chrono::microseconds>(
             std::chrono::system_clock::now().time_since_epoch()).count();
         // 同时记录开始和结束时间戳
-        TimestampLogger::getInstance().log_timestamp("PDSCH task Create_Time", create_time, "PDSCH task Finish_Time", finish_time);
-        dl_thread_controller::getInstance().update_task_time(create_time, finish_time);
+        TimestampLogger::getInstance().log_timestamp("DL task Create_Time", create_time, "DL task Finish_Time", finish_time);
+        dl_thread_state::getInstance().update_task_time(create_time, finish_time);
     }
     return flag;
   }

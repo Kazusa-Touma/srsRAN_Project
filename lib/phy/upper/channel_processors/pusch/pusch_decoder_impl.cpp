@@ -28,8 +28,10 @@
 #include "srsran/srsvec/bit.h"
 #include "srsran/srsvec/copy.h"
 #include "srsran/srsvec/zero.h"
-#include "../../../../du_high/adapters/timestamp_logger.h"
-#include "../../../../support/thread_controller.cpp"
+#include "srsran/support/timestamp_logger.h"
+#include "srsran/support/thread_state.h"
+#include <thread>
+#include <chrono>
 
 using namespace srsran;
 
@@ -444,10 +446,11 @@ void pusch_decoder_impl::join_and_notify()
   // Finally report decoding result.
   result_notifier->on_sch_data(stats);
 
+  //std::this_thread::sleep_for(std::chrono::microseconds(1000));
   finish_time = std::chrono::duration_cast<std::chrono::microseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
   TimestampLogger::getInstance().log_timestamp("PUSCH task Create_Time", create_time, "PUSCH task Finish_Time", finish_time);
-  pusch_thread_controller::getInstance().update_task_time(create_time, finish_time);
+  pusch_thread_state::getInstance().update_task_time(create_time, finish_time);
 
   // Transition back to idle.
   internal_states previous_state = current_state.exchange(internal_states::idle);
