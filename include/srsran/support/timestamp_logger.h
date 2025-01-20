@@ -94,6 +94,21 @@ public:
         }
     }
 
+    void log_timestamp_(const std::string& event_name1, int corenum, const std::string& event_name2, uint64_t timestamp){
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (!file_.is_open()) {
+            file_.open("timestamps.csv", std::ios::out);
+            if (!file_.is_open()) {
+                return;
+            }
+            // 写入CSV头
+            if (file_.tellp() == 0) {
+                file_ << "Event,Timestamp(us)" << std::endl;
+            }
+        }
+        file_ << event_name1 << ":" << corenum << ", " << event_name2 << ":" << timestamp << std::endl;
+    }
+    
     void log_timestamp(const std::string& event_name1, uint64_t timestamp1, const std::string& event_name2, uint64_t timestamp2){
         std::lock_guard<std::mutex> lock(mutex_);
         if (!file_.is_open()) {

@@ -331,6 +331,44 @@ void fapi_to_phy_translator::dl_tti_request(const fapi::dl_tti_request_message& 
     return;
   }
 
+  if(!pdus.value().pdsch.empty()){
+    std::vector<double> feature;
+    feature.emplace_back(pdus.value().pdsch[0].rnti);
+    if(pdus.value().pdsch[0].context.has_value()){
+      feature.emplace_back(pdus.value().pdsch[0].context.value().get_h_id());
+      feature.emplace_back(pdus.value().pdsch[0].context.value().get_k1());
+    }
+    std::string alloc = fmt::format("{}", pdus.value().pdsch[0].freq_alloc);
+    std::regex regex("\\d+");
+    std::sregex_iterator it(alloc.begin(), alloc.end(), regex);
+    std::sregex_iterator end;
+    std::vector<int> numbers;
+    while (it != end) {
+      numbers.push_back(std::stoi(it->str()));
+      ++it;
+    }
+    feature.emplace_back(numbers[1] - numbers[0]);
+    feature.emplace_back(pdus.value().pdsch[0].nof_symbols);
+    if(pdus.value().pdsch[0].codewords[0].modulation == srsran::modulation_scheme::QPSK){
+      feature.emplace_back(0);
+    }
+    else if(pdus.value().pdsch[0].codewords[0].modulation == srsran::modulation_scheme::QAM16){
+      feature.emplace_back(1);
+    }
+    else if(pdus.value().pdsch[0].codewords[0].modulation == srsran::modulation_scheme::QAM64){
+      feature.emplace_back(2);
+    }
+    feature.emplace_back(pdus.value().pdsch[0].codewords[0].rv);
+    if(!msg.pdus.empty() && !msg.pdus[0].pdsch_pdu.cws.empty()){
+      feature.emplace_back(msg.pdus[0].pdsch_pdu.cws[0].tb_size.value());
+    }
+
+    // for(auto &i: feature){
+    //   TimestampLogger::getInstance().log_timestamp(i);
+    // }
+    DL_scheduler::getInstance().start_schedule(feature);
+  }
+  
   // Process the PDUs.
   for (const auto& ssb : pdus.value().ssb) {
     controller->process_ssb(ssb);
@@ -344,43 +382,7 @@ void fapi_to_phy_translator::dl_tti_request(const fapi::dl_tti_request_message& 
   for (const auto& pdsch : pdus.value().pdsch) {
     pdsch_repository.pdus.push_back(pdsch);
   }
-  if(!pdsch_repository.pdus.empty()){
-    std::vector<double> feature;
-    feature.emplace_back(pdsch_repository.pdus[0].rnti);
-    if(pdsch_repository.pdus[0].context.has_value()){
-      feature.emplace_back(pdsch_repository.pdus[0].context.value().get_h_id());
-      feature.emplace_back(pdsch_repository.pdus[0].context.value().get_k1());
-    }
-    std::string alloc = fmt::format("{}", pdsch_repository.pdus[0].freq_alloc);
-    std::regex regex("\\d+");
-    std::sregex_iterator it(alloc.begin(), alloc.end(), regex);
-    std::sregex_iterator end;
-    std::vector<int> numbers;
-    while (it != end) {
-      numbers.push_back(std::stoi(it->str()));
-      ++it;
-    }
-    feature.emplace_back(numbers[1] - numbers[0]);
-    feature.emplace_back(pdsch_repository.pdus[0].nof_symbols);
-    if(pdsch_repository.pdus[0].codewords[0].modulation == srsran::modulation_scheme::QPSK){
-      feature.emplace_back(0);
-    }
-    else if(pdsch_repository.pdus[0].codewords[0].modulation == srsran::modulation_scheme::QAM16){
-      feature.emplace_back(1);
-    }
-    else if(pdsch_repository.pdus[0].codewords[0].modulation == srsran::modulation_scheme::QAM64){
-      feature.emplace_back(2);
-    }
-    feature.emplace_back(pdsch_repository.pdus[0].codewords[0].rv);
-    if(!msg.pdus.empty() && !msg.pdus[0].pdsch_pdu.cws.empty()){
-      feature.emplace_back(msg.pdus[0].pdsch_pdu.cws[0].tb_size.value());
-    }
-
-    for(auto &i: feature){
-      TimestampLogger::getInstance().log_timestamp(i);
-    }
-    DL_scheduler::getInstance().start_schedule(feature);
-  }
+  
 
   if (msg.is_last_message_in_slot) {
     srsran_assert(pdsch_repository.empty(),

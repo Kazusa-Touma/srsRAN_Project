@@ -9,6 +9,7 @@
 #include <atomic>
 #include <mutex>
 #include <vector>
+#include "timestamp_logger.h"
 
 // If a high-criticality job 𝐽𝑖 does not complete within its virtual deadline 𝐷′, 
 // the system transitions into the critical-state. All low-criticality jobs can be abandoned 
@@ -37,11 +38,8 @@ public:
 
     std::function<void()> check_status(unsigned nof_workers, std::function<void(unsigned)> wake_thread, std::function<void(unsigned)> sleep_thread){
         return [this, nof_workers, sleep_thread, wake_thread]() {
-            //auto current = std::chrono::system_clock::now();
             while(!stop_flag.load(std::memory_order_relaxed)){
-                // auto now = std::chrono::system_clock::now();
-                // auto duration = std::chrono::duration_cast<std::chrono::microseconds>(now - current);
-                std::this_thread::sleep_for(std::chrono::microseconds(20));
+                ///std::this_thread::sleep_for(std::chrono::microseconds(20));
                 if(sched_flag.load()){
                     double DL_WCET = pred->DL_predict(feature);
                     double PDSCH_WCET = pred->PDSCH_predict(feature);
@@ -50,12 +48,15 @@ public:
                     auto now = std::chrono::duration_cast<std::chrono::microseconds>(
                         std::chrono::system_clock::now().time_since_epoch()
                     ).count();
+                    TimestampLogger::getInstance().log_timestamp_("number of waking cores", core_num, "timestamp", now);
                     if(now - sched_pt > 2 * 200 / (2 + 1.414)){
+                        TimestampLogger::getInstance().log_timestamp("time limit exceed");
                         for(unsigned i = 1; i <= nof_workers; i++){
                             wake_thread(i - 1);
                         }
                     }
                     else{
+                        TimestampLogger::getInstance().log_timestamp("time limit not exceed");
                         for(unsigned i = 1; i <= nof_workers; i++){
                             if(i <= core_num){
                                 wake_thread(i - 1);
@@ -72,21 +73,22 @@ public:
 
     void start_schedule(std::vector<double> feature_){
         std::lock_guard<std::mutex> lck(feature_mtx);
-        sched_flag.store(true);
         sched_pt = std::chrono::duration_cast<std::chrono::microseconds>(
             std::chrono::system_clock::now().time_since_epoch()
         ).count();
         feature = feature_;
+        sched_flag.store(true);
     }
 
     void DL_update(double cost){
         std::lock_guard<std::mutex> lck(feature_mtx);
-        sched_flag.store(false);
         pred->DL_online_update(feature, cost);
+        sched_flag.store(false);
     }
 
     void PDSCH_update(double cost){
         std::lock_guard<std::mutex> lck(feature_mtx);
+        pred->PDSCH_online_update(feature, cost);
     }
 
     std::atomic<bool> stop_flag;

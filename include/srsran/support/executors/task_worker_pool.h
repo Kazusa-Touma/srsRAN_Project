@@ -269,6 +269,7 @@ public:
       
       check();
     });
+    check_loop.detach();
   }
 
   std::fstream dl_logfile_stream;
