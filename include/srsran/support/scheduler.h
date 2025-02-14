@@ -23,14 +23,8 @@ namespace srsran
 {
 
 
-
 class DL_scheduler{
 public:
-    DL_scheduler(){
-        pred = std::make_unique<predictor>();
-        stop_flag.store(false);
-    }
-
     static DL_scheduler& getInstance(){
         static DL_scheduler instance;
         return instance;
@@ -99,6 +93,15 @@ public:
     std::vector<double> feature;
 
 private:
+    DL_scheduler(){
+        pred = std::make_unique<predictor>();
+        stop_flag.store(false);
+    }
+
+    ~DL_scheduler(){
+        stop_flag.store(true);
+    }
+
     std::unique_ptr<predictor> pred;
 };
 

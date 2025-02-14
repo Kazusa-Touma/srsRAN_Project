@@ -43,14 +43,6 @@ detail::base_worker_pool::base_worker_pool(unsigned                             
   }
 
   unsigned actual_workers = nof_workers_ / 2 ? nof_workers_ / 2 : 1;
-  // if(worker_pool_name.find("up_phy_dl") != std::string::npos){
-  //     for(unsigned i = 0; i < nof_workers_; i++){
-  //       is_yield.push_back(!(i >= actual_workers && (worker_pool_name.find("up_phy_dl") != std::string::npos || worker_pool_name.find("pusch") != std::string::npos)));
-  //       //is_yield.push_back(true);
-  //       cv.emplace_back(new std::condition_variable());
-  //       mtx.emplace_back(new std::mutex());
-  //     }
-  // }
   for(unsigned i = 0; i < nof_workers_; i++){
     is_yield.push_back(!(i >= actual_workers && (worker_pool_name.find("up_phy_dl") != std::string::npos || worker_pool_name.find("pusch") != std::string::npos)));
     //is_yield.push_back(true);

@@ -284,10 +284,11 @@ public:
     }
     std::chrono::system_clock::time_point current = std::chrono::system_clock::now();
     std::chrono::duration<double, std::milli> running_duration = std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(current - start_time);
-    counter = static_cast<unsigned>(running_duration.count() / 50) % total_num;
+    counter = static_cast<unsigned>(running_duration.count() / 2000) % total_num;
     std::normal_distribution<double> gauss(0.0, ret / 100);
     auto noise = gauss(gen);
     //fmt::print("DL is {}, noise is {}\n", ret, noise);
+    //fmt::print("{}\n", counter);
     TimestampLogger::getInstance().log_timestamp("dl_buffer_size", ret + noise, dl_brate_table[counter], std::chrono::duration_cast<std::chrono::microseconds>(current.time_since_epoch()).count());
     return ret + noise;
 }

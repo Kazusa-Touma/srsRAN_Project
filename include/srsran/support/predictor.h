@@ -21,10 +21,7 @@ predictor(){
         PDSCH_pos.push_back(0);
     }
 }
-static predictor& getInstance(){
-    static predictor pred;
-    return pred;
-}
+
 void DL_update(int index, double runtime){
     DL_buf[index][DL_pos[index]] = runtime;
     DL_pos[index] = (DL_pos[index] + 1) % 5000;
