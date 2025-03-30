@@ -114,6 +114,16 @@ public:
       TimestampLogger::getInstance().log_timestamp(
           "DL task Create_Time", create_time, "DL task Finish_Time", finish_time);
       dl_thread_state::getInstance().update_task_time(create_time, finish_time);
+
+      // 专门用来记录task的完整时间的数据
+      std::ofstream csv_file("dl_task_finished_time.csv", std::ios::out | std::ios::app);
+      if (!csv_file.is_open()) {
+        throw std::runtime_error("Failed to open CSV file");
+      }
+      auto noww       = std::chrono::system_clock::now();
+      auto time_stamp = std::chrono::duration_cast<std::chrono::microseconds>(noww.time_since_epoch()).count();
+      csv_file << time_stamp << "," << finish_time - create_time << "\n";
+      csv_file.flush(); // Ensure the data is written to disk
     }
     return flag;
   }
