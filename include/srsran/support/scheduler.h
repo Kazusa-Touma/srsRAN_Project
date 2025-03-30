@@ -9,6 +9,7 @@
 #include <atomic>
 #include <mutex>
 #include <vector>
+#include <fstream>
 #include "timestamp_logger.h"
 
 // If a high-criticality job 𝐽𝑖 does not complete within its virtual deadline 𝐷′, 
@@ -32,33 +33,45 @@ public:
 
     std::function<void()> check_status(unsigned nof_workers, std::function<void(unsigned)> wake_thread, std::function<void(unsigned)> sleep_thread){
         return [this, nof_workers, sleep_thread, wake_thread]() {
+            std::ofstream csv_file("task log.csv", std::ios::out);
+            csv_file << "timestamp,core_num,num1,num2,start_point\n";
             while(!stop_flag.load(std::memory_order_relaxed)){
-                ///std::this_thread::sleep_for(std::chrono::microseconds(20));
+                std::this_thread::sleep_for(std::chrono::microseconds(20));
+                auto now = std::chrono::duration_cast<std::chrono::microseconds>(
+                        std::chrono::system_clock::now().time_since_epoch()
+                ).count();
                 if(sched_flag.load()){
                     double DL_WCET = pred->DL_predict(feature);
                     double PDSCH_WCET = pred->PDSCH_predict(feature);
-                    unsigned core_num = std::max(1, int(std::ceil((DL_WCET - PDSCH_WCET) / (2 * 200 / (2 + 1.414) - PDSCH_WCET))));
+                    unsigned core_num = std::max(std::max(int(std::ceil(DL_WCET / 500)), 1), int(std::ceil((DL_WCET - PDSCH_WCET) / (292.9 - PDSCH_WCET))));
                     core_num = std::min(core_num, nof_workers);
-                    auto now = std::chrono::duration_cast<std::chrono::microseconds>(
-                        std::chrono::system_clock::now().time_since_epoch()
-                    ).count();
-                    TimestampLogger::getInstance().log_timestamp_("number of waking cores", core_num, "timestamp", now);
-                    if(now - sched_pt > 2 * 200 / (2 + 1.414)){
-                        TimestampLogger::getInstance().log_timestamp("time limit exceed");
-                        for(unsigned i = 1; i <= nof_workers; i++){
+                    csv_file << now << "," << core_num << "," << DL_WCET << "," << 
+                    std::ceil((DL_WCET - PDSCH_WCET) / (292.9 - PDSCH_WCET)) << "," <<
+                    sched_pt << std::endl;
+                    sched_flag.store(false);
+                    if(core_num < last_core_num){
+                        for(unsigned i = core_num + 1; i <= last_core_num; i++){
+                            sleep_thread(i - 1);
+                        }
+                    }
+                    else if(core_num > last_core_num){
+                        for(unsigned i = last_core_num + 1; i <= core_num; i++){
                             wake_thread(i - 1);
                         }
                     }
                     else{
-                        TimestampLogger::getInstance().log_timestamp("time limit not exceed");
-                        for(unsigned i = 1; i <= nof_workers; i++){
-                            if(i <= core_num){
-                                wake_thread(i - 1);
-                            }
-                            else{
-                                sleep_thread(i - 1);
-                            }
+                        continue;
+                    }
+                    last_core_num = core_num;
+                }
+                else{
+                    if(now - sched_pt > 292.9 && !is_finished.load() && last_core_num < nof_workers){
+                        for(unsigned i = last_core_num + 1; i <= nof_workers; i++){
+                            wake_thread(i - 1);
                         }
+                        last_core_num = nof_workers;
+                        csv_file << now << "," << last_core_num << "," << -100 << "," << 
+                        -100 << "," << sched_pt << std::endl;
                     }
                 }
             }
@@ -66,35 +79,35 @@ public:
     }
 
     void start_schedule(std::vector<double> feature_){
-        std::lock_guard<std::mutex> lck(feature_mtx);
         sched_pt = std::chrono::duration_cast<std::chrono::microseconds>(
             std::chrono::system_clock::now().time_since_epoch()
         ).count();
         feature = feature_;
         sched_flag.store(true);
+        is_finished.store(false);
     }
 
     void DL_update(double cost){
-        std::lock_guard<std::mutex> lck(feature_mtx);
         pred->DL_online_update(feature, cost);
-        sched_flag.store(false);
+        is_finished.store(true);
     }
 
     void PDSCH_update(double cost){
-        std::lock_guard<std::mutex> lck(feature_mtx);
         pred->PDSCH_online_update(feature, cost);
     }
 
     std::atomic<bool> stop_flag;
-
     std::atomic<bool> sched_flag{false};
+    std::atomic<bool> is_finished{false};
     long sched_pt;
+    unsigned last_core_num = 8;
     std::mutex feature_mtx;
     std::vector<double> feature;
 
 private:
     DL_scheduler(){
         pred = std::make_unique<predictor>();
+        feature = {0, 0, 0, 0, 0, 0, 0, 0};
         stop_flag.store(false);
     }
 

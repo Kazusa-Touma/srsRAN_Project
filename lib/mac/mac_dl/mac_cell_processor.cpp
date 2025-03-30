@@ -216,7 +216,7 @@ void mac_cell_processor::handle_slot_indication_impl(slot_point sl_tx)
   
     // 记录时间戳
     TimestampLogger::getInstance().log_timestamp("MAC_to_PHY", timestamp);
-    TimestampLogger::getInstance().log_timestamp(sl_tx);
+    // TimestampLogger::getInstance().log_timestamp(sl_tx);
     // Send DL sched result to PHY.
     phy_cell.on_new_downlink_scheduler_results(mac_dl_res);
 

@@ -1169,7 +1169,7 @@ private:
           std::chrono::duration_cast<std::chrono::microseconds>(start.time_since_epoch()).count(), 
           "PDSCH finish time", 
           std::chrono::duration_cast<std::chrono::microseconds>(end.time_since_epoch()).count());
-      TimestampLogger::getInstance().log_timestamp(fmt::format("{:s}", pdu) + " PDSCH time", time_ns.count(), data.size(), pdu.slot);
+      TimestampLogger::getInstance().log_timestamp(fmt::format("{:s}", pdu) + " PDSCH time", time_ns.count(), data.size());
     }
     //fmt::print("logging: {}\n", pdu);
 

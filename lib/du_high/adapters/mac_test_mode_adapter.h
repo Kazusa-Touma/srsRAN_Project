@@ -238,6 +238,8 @@ public:
   }
   std::chrono::system_clock::time_point current = std::chrono::system_clock::now();
   std::chrono::duration<double, std::milli> running_duration = std::chrono::duration_cast<std::chrono::milliseconds>(current - start_time);
+  TimestampLogger::getInstance().log_timestamp_("dl_buffer_size", min(max_buffer_size,
+             min_buffer_size + static_cast<unsigned>(running_duration.count()) / buffer_interval * buffer_step));
   return min(max_buffer_size,
              min_buffer_size + static_cast<unsigned>(running_duration.count()) / buffer_interval * buffer_step);
 }
@@ -252,6 +254,8 @@ class trace_test_mode : public test_mode_buffer_size{
 public:
   trace_test_mode(std::string CSV_filename): gen((unsigned int) time(nullptr)){
     std::ifstream csv_data(CSV_filename, std::ios::in);
+    csv_time.open("timestamp-BS.csv", std::ios::out);
+    csv_time << "timestamp,BS,brate\n";
     std::string line;
     if (!csv_data.is_open()) {
       std::exit(1);
@@ -267,7 +271,7 @@ public:
             if(turn == 1){
                 dl_brate_table.push_back(stod(word));
             }
-            turn = (turn + 1) % 14;
+            turn = (turn + 1) % 10;
         }
     }
     csv_data.close();
@@ -284,12 +288,13 @@ public:
     }
     std::chrono::system_clock::time_point current = std::chrono::system_clock::now();
     std::chrono::duration<double, std::milli> running_duration = std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(current - start_time);
-    counter = static_cast<unsigned>(running_duration.count() / 2000) % total_num;
-    std::normal_distribution<double> gauss(0.0, ret / 100);
+    counter = static_cast<unsigned>(running_duration.count() / 1000) % total_num;
+    std::normal_distribution<double> gauss(0.0, ret / 50);
     auto noise = gauss(gen);
     //fmt::print("DL is {}, noise is {}\n", ret, noise);
     //fmt::print("{}\n", counter);
     TimestampLogger::getInstance().log_timestamp("dl_buffer_size", ret + noise, dl_brate_table[counter], std::chrono::duration_cast<std::chrono::microseconds>(current.time_since_epoch()).count());
+    csv_time << std::chrono::duration_cast<std::chrono::microseconds>(current.time_since_epoch()).count() << "," << ret + noise << "," << dl_brate_table[counter] << std::endl;
     return ret + noise;
 }
 private:
@@ -299,6 +304,8 @@ private:
   std::chrono::system_clock::time_point start_time;
   bool first_called = true;
   std::mt19937 gen;
+
+  std::ofstream csv_time;
 };
 
 class mac_test_mode_adapter final : public mac_interface,

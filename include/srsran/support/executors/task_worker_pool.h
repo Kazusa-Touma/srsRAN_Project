@@ -216,8 +216,7 @@ public:
       pusch_logfile_stream.open("pusch_result_UL.txt", std::ios::out);
       //startThread(check_status(), "PUSCH");
     }
-    //stop_flag.store(false);
-  }
+  } 
   ~task_worker_pool();
 
   bool check_poolname() { return this->pool_name.find("up_phy_dl") != std::string::npos 
@@ -266,16 +265,20 @@ public:
       pthread_t thread = pthread_self();
       pthread_setaffinity_np(thread, sizeof(cpu_set_t), &cpuset);
       pthread_setname_np(thread, ("scheduler_" + thread_name).c_str());
-      
+
+      // 设置线程优先级
+      struct sched_param param;
+      param.sched_priority = 95; // 设置所需的优先级
+      pthread_setschedparam(thread, SCHED_FIFO, &param); // 使用实时调度策略
+
       check();
     });
-    check_loop.detach();
+    // check_loop.detach();
   }
 
   std::fstream dl_logfile_stream;
   std::fstream pusch_logfile_stream;
 
-  //std::atomic<bool> stop_flag;
   std::thread check_loop;
   std::mutex write_mutex;
 

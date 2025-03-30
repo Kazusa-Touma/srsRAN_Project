@@ -42,10 +42,10 @@ detail::base_worker_pool::base_worker_pool(unsigned                             
     report_error_if_not(cpu_masks.size() == nof_workers_, "Wrong array of CPU masks provided");
   }
 
-  unsigned actual_workers = nof_workers_ / 2 ? nof_workers_ / 2 : 1;
+  //unsigned actual_workers = nof_workers_ / 2 ? nof_workers_ / 2 : 1;
   for(unsigned i = 0; i < nof_workers_; i++){
-    is_yield.push_back(!(i >= actual_workers && (worker_pool_name.find("up_phy_dl") != std::string::npos || worker_pool_name.find("pusch") != std::string::npos)));
-    //is_yield.push_back(true);
+    //is_yield.push_back(!(i >= actual_workers && (worker_pool_name.find("up_phy_dl") != std::string::npos || worker_pool_name.find("pusch") != std::string::npos)));
+    is_yield.push_back(true);
     cv.emplace_back(new std::condition_variable());
     mtx.emplace_back(new std::mutex());
   }
@@ -183,11 +183,12 @@ task_worker_pool<QueuePolicy>::~task_worker_pool()
 template <concurrent_queue_policy QueuePolicy>
 void task_worker_pool<QueuePolicy>::stop()
 {
-  if(!DL_scheduler::getInstance().stop_flag.load(std::memory_order_relaxed)){
-    DL_scheduler::getInstance().stop_flag.store(true);
-    if(this->check_loop.joinable()){
-      this->check_loop.join();
-    }
+  DL_scheduler::getInstance().stop_flag.store(true);
+  if(this->check_loop.joinable()){
+    this->check_loop.join();
+  }
+  for(unsigned i = 0; i < this->nof_workers(); i++){
+    is_yield[i] = true;
   }
   unsigned count = 0;
   for (unique_thread& w : worker_threads) {
@@ -229,9 +230,12 @@ std::function<void()> task_worker_pool<QueuePolicy>::create_pop_loop_task()
           //std::lock_guard<std::mutex> lock(write_mutex);
           dl_logfile_stream << std::put_time(std::localtime(&t), "%Y-%m-%d %H.%M.%S") << " " << "\ttask finished execution, " 
           << "\twait time is " << job.get_processing_time() - job.get_in_queue_time() << "us, "
-          << "\texecute time is " << job.get_end_processing_time() - job.get_processing_time() << "us, "
-          << "\tpush_task time is " << job.get_in_queue_time() << ", \ttask finished time is " << job.get_end_processing_time()
-          << "\tqueue length when pushing tasks is " << job.get_queue_length() << ", \tqueue length when finishing tasks is " << this->nof_pending_tasks() << std::endl;
+          << "\texecute time is " << job.get_end_processing_time() - job.get_processing_time() << "us";
+          if(logger.debug.enabled()){
+            dl_logfile_stream << ", \tpush_task time is " << job.get_in_queue_time() << ", \ttask finished time is " << job.get_end_processing_time()
+            << "\tqueue length when pushing tasks is " << job.get_queue_length() << ", \tqueue length when finishing tasks is " << this->nof_pending_tasks();
+          }
+          dl_logfile_stream << std::endl;
           dl_thread_state::getInstance().update_exec_time(job.get_end_processing_time() - job.get_processing_time());
           dl_thread_state::getInstance().update_wait_time(job.get_processing_time() - job.get_in_queue_time());
           dl_thread_state::getInstance().update_pop_time(job.get_processing_time());
@@ -239,11 +243,14 @@ std::function<void()> task_worker_pool<QueuePolicy>::create_pop_loop_task()
         }
         else{
           //std::lock_guard<std::mutex> lock(write_mutex);
-          pusch_logfile_stream << std::put_time(std::localtime(&t), "%Y-%m-%d %H.%M.%S") << " " << "\ttask finished execution, "
+          pusch_logfile_stream << std::put_time(std::localtime(&t), "%Y-%m-%d %H.%M.%S") << " " << "\ttask finished execution, " 
           << "\twait time is " << job.get_processing_time() - job.get_in_queue_time() << "us, "
-          << "\texecute time is " << job.get_end_processing_time() - job.get_processing_time() << "us, "
-          << "\tpush_task time is " << job.get_in_queue_time() << ", \ttask finished time is " << job.get_end_processing_time() 
-          << "\tqueue length when pushing tasks is " << job.get_queue_length() << ", \tqueue length when finishing tasks is " << this->nof_pending_tasks() << std::endl;
+          << "\texecute time is " << job.get_end_processing_time() - job.get_processing_time() << "us";
+          if(logger.debug.enabled()){
+            pusch_logfile_stream << ", \tpush_task time is " << job.get_in_queue_time() << ", \ttask finished time is " << job.get_end_processing_time()
+            << "\tqueue length when pushing tasks is " << job.get_queue_length() << ", \tqueue length when finishing tasks is " << this->nof_pending_tasks();
+          }
+          pusch_logfile_stream << std::endl;
           pusch_thread_state::getInstance().update_exec_time(job.get_end_processing_time() - job.get_processing_time());
           pusch_thread_state::getInstance().update_wait_time(job.get_processing_time() - job.get_in_queue_time());
           pusch_thread_state::getInstance().update_pop_time(job.get_processing_time());
