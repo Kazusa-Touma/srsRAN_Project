@@ -1,3 +1,6 @@
+#ifndef THREAD_STATE_H
+#define THREAD_STATE_H
+
 #include <vector>
 
 class dl_thread_state
@@ -7,6 +10,15 @@ public:
   {
     static dl_thread_state instance;
     return instance;
+  }
+
+  long getBlockTime(int index)
+  {
+    if (index < static_cast<int>(task_block_times.size())) {
+      return task_block_times[index][(block_lens[index] + 99) % 100];
+    } else {
+      return -1; // If index is out of range, return -1
+    }
   }
 
   void update_exec_time(long t)
@@ -53,6 +65,15 @@ public:
     create_time[create_len][1] = t2;
     create_len                 = (create_len + 1) % 200;
   }
+  void update_task_block_time(int index, long t)
+  {
+    if (index >= static_cast<int>(task_block_times.size())) {
+      task_block_times.resize(index + 1, std::vector<long>(100, 0));
+      block_lens.resize(index + 1, 0);
+    }
+    task_block_times[index][block_lens[index]] = t;
+    block_lens[index]                          = (block_lens[index] + 1) % 100;
+  }
 
   std::vector<long> exec_time = std::vector<long>(100, 0);
   int               exec_len  = 0;
@@ -72,6 +93,10 @@ public:
   long              len_sum        = 0;
   int               len_incre      = 0;
 
+  // 用于记录 worker 的阻塞时长
+  std::vector<std::vector<long>> task_block_times = std::vector<std::vector<long>>(8, std::vector<long>(100, 0));
+  std::vector<int>               block_lens       = std::vector<int>(8, 0);
+
   std::vector<std::vector<long>> create_time = std::vector<std::vector<long>>(200, std::vector<long>(2, 0));
   int                            create_len  = 0;
   std::vector<std::vector<long>> finish_time = std::vector<std::vector<long>>(200, std::vector<long>(2, 0));
@@ -85,6 +110,15 @@ public:
   {
     static pusch_thread_state instance;
     return instance;
+  }
+
+  long getBlockTime(int index)
+  {
+    if (index < static_cast<int>(task_block_times.size())) {
+      return task_block_times[index][(block_lens[index] + 99) % 100];
+    } else {
+      return -1; // If index is out of range, return -1
+    }
   }
 
   void update_exec_time(long t)
@@ -132,6 +166,16 @@ public:
     create_len                 = (create_len + 1) % 100;
   }
 
+  void update_task_block_time(int index, long t)
+  {
+    if (index >= static_cast<int>(task_block_times.size())) {
+      task_block_times.resize(index + 1, std::vector<long>(100, 0));
+      block_lens.resize(index + 1, 0);
+    }
+    task_block_times[index][block_lens[index]] = t;
+    block_lens[index]                          = (block_lens[index] + 1) % 100;
+  }
+
   std::vector<long> exec_time = std::vector<long>(100, 0);
   int               exec_len  = 0;
   long              exec_sum  = 0;
@@ -150,8 +194,13 @@ public:
   long              len_sum        = 0;
   int               len_incre      = 0;
 
+  // 用于记录 worker 的阻塞时长
+  std::vector<std::vector<long>> task_block_times = std::vector<std::vector<long>>(8, std::vector<long>(100, 0));
+  std::vector<int>               block_lens       = std::vector<int>(8, 0);
+
   std::vector<std::vector<long>> create_time = std::vector<std::vector<long>>(100, std::vector<long>(2, 0));
   int                            create_len  = 0;
   std::vector<std::vector<long>> finish_time = std::vector<std::vector<long>>(100, std::vector<long>(2, 0));
   int                            finish_len  = 0;
 };
+#endif
