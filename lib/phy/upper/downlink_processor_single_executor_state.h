@@ -22,13 +22,13 @@
 
 #pragma once
 
-#include "srsran/support/srsran_assert.h"
 #include "srsran/instrumentation/traces/du_traces.h"
-#include "srsran/support/timestamp_logger.h"
-#include "srsran/support/thread_state.h"
 #include "srsran/support/scheduler.h"
-#include <thread>
+#include "srsran/support/srsran_assert.h"
+#include "srsran/support/thread_state.h"
+#include "srsran/support/timestamp_logger.h"
 #include <chrono>
+#include <thread>
 
 namespace srsran {
 
@@ -89,9 +89,10 @@ public:
   {
     srsran_assert(
         (state == states::processing), "DL processor task created in an invalid state, i.e., {}.", to_string(state));
-    if(pending_pdus == 0) {
-      create_time = std::chrono::duration_cast<std::chrono::microseconds>(
-          std::chrono::system_clock::now().time_since_epoch()).count();
+    if (pending_pdus == 0) {
+      create_time =
+          std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch())
+              .count();
     }
     increase_pending_pdus();
   }
@@ -103,14 +104,16 @@ public:
   {
     decrease_pending_pdus();
     bool flag = (state == states::finishing) && (pending_pdus == 0);
-    if(flag) {
-        //std::this_thread::sleep_for(std::chrono::microseconds(1500));
-        finish_time = std::chrono::duration_cast<std::chrono::microseconds>(
-            std::chrono::system_clock::now().time_since_epoch()).count();
-        DL_scheduler::getInstance().DL_update(finish_time - create_time);
-        // 同时记录开始和结束时间戳
-        TimestampLogger::getInstance().log_timestamp("DL task Create_Time", create_time, "DL task Finish_Time", finish_time);
-        dl_thread_state::getInstance().update_task_time(create_time, finish_time);
+    if (flag) {
+      // std::this_thread::sleep_for(std::chrono::microseconds(1500));
+      finish_time =
+          std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch())
+              .count();
+      DL_scheduler::getInstance().DL_update(finish_time - create_time);
+      // 同时记录开始和结束时间戳
+      TimestampLogger::getInstance().log_timestamp(
+          "DL task Create_Time", create_time, "DL task Finish_Time", finish_time);
+      dl_thread_state::getInstance().update_task_time(create_time, finish_time);
     }
     return flag;
   }
