@@ -172,6 +172,7 @@ public:
     return [this, nof_workers, sleep_thread, wake_thread, get_nof_pending_tasks, pool_name]() {
       auto     current                 = std::chrono::system_clock::now();
       auto     log_current             = std::chrono::system_clock::now();
+      auto     event_current           = std::chrono::system_clock::now();
       unsigned current_cpu_index_point = (nof_workers == 1 ? nof_workers : nof_workers / 2);
       // unsigned current_cpu_index_point = 4;
 
@@ -201,7 +202,7 @@ public:
       // const unsigned cpu_adjust_frequency = 15; // CPU 调整频率
       // const unsigned cpu_reclaim_frequency  = 40000; // CPU 回收频率
       // const unsigned cpu_reclaim_frequency  = cpu_adjust_frequency * 1500; // CPU 回收频率，目前是36000us
-      const unsigned cpu_reclaim_frequency = cpu_adjust_frequency * 500; // CPU 回收频率，目前是36000us
+      const unsigned cpu_reclaim_frequency = cpu_adjust_frequency * 500; // CPU 回收频率，目前是12000us
       // const unsigned cpu_increase_frequency = 400;                        // CPU 增加频率
       const unsigned cpu_increase_frequency = cpu_adjust_frequency * 20; // CPU 增加频率
       const unsigned log_frequency          = 2;                         // 日志记录频率
@@ -211,12 +212,16 @@ public:
       const unsigned window_size_decrease = 2300; // CPU减少窗口大小
       // const unsigned window_size_increase = 21 * cpu_adjust_frequency; // CPU增加窗口大小
       // const unsigned window_size_decrease = 96 * cpu_adjust_frequency; // CPU减少窗口大小
+      // const unsigned window_size_increase = 500 * 0.7;  // CPU增加窗口大小
+      // const unsigned window_size_decrease = 2300 * 0.7; // CPU减少窗口大小
       const unsigned num_records_increase = window_size_increase / block_record_frequency;
       const unsigned num_records_decrease = window_size_decrease / block_record_frequency;
 
       // 修改F_min和F_max分别只依赖于对应的窗口大小
+      // F_min越大，说明越容易增加CPU，F_max越小，说明越容易减少CPU
       unsigned F_min = 0.33 * window_size_increase;
       unsigned F_max = 0.45 * window_size_decrease;
+      // unsigned F_min = 0.36 * window_size_increase;
       // unsigned F_max = 0.4 * window_size_decrease;
 
       std::vector<unsigned> idle_counts_increase(num_records_increase, 0); // CPU增加窗口环形缓冲区
@@ -229,27 +234,31 @@ public:
 
       unsigned idle_count = 0; // 队列为空的次数
 
-      auto now                    = std::chrono::system_clock::now();
-      auto log_now                = std::chrono::system_clock::now();
+      auto now = std::chrono::system_clock::now();
+      // auto log_now                = std::chrono::system_clock::now();
+      // auto event_now              = std::chrono::system_clock::now();
       auto last_reclaim_cpu_time  = std::chrono::system_clock::now(); // 用于记录上次回收cpu的时间
       auto last_increase_cpu_time = std::chrono::system_clock::now(); // 用于记录上次增加cpu的时间
       auto duration               = std::chrono::duration_cast<std::chrono::microseconds>(now - current).count();
-      auto log_duration = std::chrono::duration_cast<std::chrono::microseconds>(log_now - log_current).count();
+      auto log_duration           = std::chrono::duration_cast<std::chrono::microseconds>(now - log_current).count();
+      auto event_duration         = std::chrono::duration_cast<std::chrono::microseconds>(now - event_current).count();
       while (!stop_flag.load(std::memory_order_relaxed)) {
-        now          = std::chrono::system_clock::now();
-        log_now      = std::chrono::system_clock::now();
-        duration     = std::chrono::duration_cast<std::chrono::microseconds>(now - current).count();
-        log_duration = std::chrono::duration_cast<std::chrono::microseconds>(log_now - log_current).count();
+        if (pool_name.find("up_phy_dl") != std::string::npos) {
+          now = std::chrono::system_clock::now();
+          // log_now      = std::chrono::system_clock::now();
+          // event_now      = std::chrono::system_clock::now();
+          duration       = std::chrono::duration_cast<std::chrono::microseconds>(now - current).count();
+          log_duration   = std::chrono::duration_cast<std::chrono::microseconds>(now - log_current).count();
+          event_duration = std::chrono::duration_cast<std::chrono::microseconds>(now - event_current).count();
+          // fmt::print("duration: {}, log_duration: {}, event_duration: {}\n", duration, log_duration, event_duration);
 
-        // 每 2us 记录一次队列为空的次数
-        if (duration % block_record_frequency == 0 && get_nof_pending_tasks() == 0) {
-          idle_count = 1;
-        } else {
-          idle_count = 0;
-        }
-
-        if (duration >= cpu_adjust_frequency) {
-          if (pool_name.find("up_phy_dl") != std::string::npos) {
+          // 每 2us 记录一次队列为空的次数
+          if (event_duration >= block_record_frequency) {
+            if (get_nof_pending_tasks() == 0) {
+              idle_count = 1;
+            } else {
+              idle_count = 0;
+            }
             // 更新CPU增加窗口
             idle_sum_increase -= idle_counts_increase[record_index_increase];
             idle_counts_increase[record_index_increase] = idle_count;
@@ -261,31 +270,34 @@ public:
             idle_counts_decrease[record_index_decrease] = idle_count;
             idle_sum_decrease += idle_count;
             record_index_decrease = (record_index_decrease + 1) % num_records_decrease;
+            event_current         = now;
+          }
 
-            // 记录日志
-            if (log_duration >= log_frequency) {
-              for (int i = 0; i < int(current_cpu_index_point); i++) {
-                long block_time = dl_thread_state::getInstance().getBlockTime(i);
-                log_buffer.push_back({now,
-                                      i,
-                                      block_time,
-                                      int(get_nof_pending_tasks()),
-                                      current_cpu_index_point,
-                                      idle_sum_increase,
-                                      idle_sum_decrease});
-              }
+          // 记录日志
+          if (log_duration >= log_frequency) {
+            for (int i = 0; i < int(current_cpu_index_point); i++) {
+              long block_time = dl_thread_state::getInstance().getBlockTime(i);
+              log_buffer.push_back({now,
+                                    i,
+                                    block_time,
+                                    int(get_nof_pending_tasks()),
+                                    current_cpu_index_point,
+                                    idle_sum_increase,
+                                    idle_sum_decrease});
             }
-            if (log_buffer.size() >= BUFFER_SIZE) {
-              // 使用 std::async 异步调用文件写入操作
-              std::async(std::launch::async, [log_file_name, log_buffer_copy = std::vector<LogEntry>(log_buffer)]() {
-                write_to_csv(log_file_name, log_buffer_copy); // 异步写入 CSV
-              });
-              log_buffer.clear(); // 清空缓冲区
-            }
-
+            log_current = now;
+          }
+          if (log_buffer.size() >= BUFFER_SIZE) {
+            // 使用 std::async 异步调用文件写入操作
+            std::async(std::launch::async, [log_file_name, log_buffer_copy = std::vector<LogEntry>(log_buffer)]() {
+              write_to_csv(log_file_name, log_buffer_copy); // 异步写入 CSV
+            });
+            log_buffer.clear(); // 清空缓冲区
+          }
+          if (duration >= cpu_adjust_frequency) {
             /* start - 用户测试不同的core固定时的性能 */
 
-            // unsigned int pin_cpu = 1;
+            // unsigned int pin_cpu = 4;
 
             // if (current_cpu_index_point > pin_cpu) {
             //   sleep_thread(--current_cpu_index_point);
@@ -294,29 +306,30 @@ public:
             //   wake_thread(current_cpu_index_point);
             //   ++current_cpu_index_point;
             // }
-            /* end - 用户测试不同的core固定时的性能 */
-          }
 
-          // 将队列为空的次数控制在 [F_min, F_max]
-          if (idle_sum_increase < F_min && current_cpu_index_point < nof_workers) {
-            // 增加 CPU 核数
-            auto increase_cpu_time = std::chrono::system_clock::now();
-            if (std::chrono::duration_cast<std::chrono::microseconds>(increase_cpu_time - last_increase_cpu_time)
-                    .count() > cpu_increase_frequency) {
-              last_increase_cpu_time = increase_cpu_time;
-              wake_thread(current_cpu_index_point);
-              ++current_cpu_index_point;
+            /* end - 用户测试不同的core固定时的性能 */
+
+            // 将队列为空的次数控制在 [F_min, F_max]
+            if (idle_sum_increase < F_min && current_cpu_index_point < nof_workers) {
+              // 增加 CPU 核数
+              auto increase_cpu_time = std::chrono::system_clock::now();
+              if (std::chrono::duration_cast<std::chrono::microseconds>(increase_cpu_time - last_increase_cpu_time)
+                      .count() > cpu_increase_frequency) {
+                last_increase_cpu_time = increase_cpu_time;
+                wake_thread(current_cpu_index_point);
+                ++current_cpu_index_point;
+              }
+            } else if (idle_sum_decrease > F_max && current_cpu_index_point > 1) {
+              // 减少 CPU 核数
+              auto reclaim_cpu_time = std::chrono::system_clock::now();
+              if (std::chrono::duration_cast<std::chrono::microseconds>(reclaim_cpu_time - last_reclaim_cpu_time)
+                      .count() > cpu_reclaim_frequency) {
+                last_reclaim_cpu_time = reclaim_cpu_time;
+                sleep_thread(--current_cpu_index_point);
+              }
             }
-          } else if (idle_sum_decrease > F_max && current_cpu_index_point > 1) {
-            // 减少 CPU 核数
-            auto reclaim_cpu_time = std::chrono::system_clock::now();
-            if (std::chrono::duration_cast<std::chrono::microseconds>(reclaim_cpu_time - last_reclaim_cpu_time)
-                    .count() > cpu_reclaim_frequency) {
-              last_reclaim_cpu_time = reclaim_cpu_time;
-              sleep_thread(--current_cpu_index_point);
-            }
+            current = now;
           }
-          current = now;
         }
       }
 
