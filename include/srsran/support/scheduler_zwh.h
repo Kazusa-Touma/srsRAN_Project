@@ -25,12 +25,12 @@ namespace srsran {
 
 struct LogEntry {
   std::chrono::system_clock::time_point timestamp;
-  int                                   worker_id;
-  long long                             task_block_time;
-  int                                   queue_len;
-  unsigned                              current_cpu_index_point;
-  unsigned                              idle_sum_increase;
-  unsigned                              idle_sum_decrease;
+  // int                                   worker_id;
+  // long long                             task_block_time;
+  // int                                   queue_len;
+  unsigned current_cpu_index_point;
+  unsigned idle_sum_increase;
+  unsigned idle_sum_decrease;
 };
 
 inline void write_to_csv(std::string filename, const std::vector<LogEntry>& log_buffer)
@@ -42,9 +42,11 @@ inline void write_to_csv(std::string filename, const std::vector<LogEntry>& log_
 
   for (const auto& entry : log_buffer) {
     auto time_stamp = std::chrono::duration_cast<std::chrono::microseconds>(entry.timestamp.time_since_epoch()).count();
-    csv_file << time_stamp << "," << entry.worker_id << "," << entry.task_block_time << "," << entry.queue_len << ","
-             << entry.current_cpu_index_point << "," << entry.idle_sum_increase << "," << entry.idle_sum_decrease
-             << "\n";
+    // csv_file << time_stamp << "," << entry.worker_id << "," << entry.task_block_time << "," << entry.queue_len << ","
+    //          << entry.current_cpu_index_point << "," << entry.idle_sum_increase << "," << entry.idle_sum_decrease
+    //          << "\n";
+    csv_file << time_stamp << "," << entry.current_cpu_index_point << "," << entry.idle_sum_increase << ","
+             << entry.idle_sum_decrease << "\n";
   }
 
   csv_file.flush(); // Ensure the data is written to disk
@@ -133,14 +135,14 @@ public:
             // fmt::print("pusch idle_sum: {}\n", idle_sum);
 
             // 记录日志
-            for (int i = 0; i < int(current_cpu_index_point); i++) {
-              long block_time = pusch_thread_state::getInstance().getBlockTime(i);
-              log_buffer.push_back(
-                  {now, i, block_time, int(get_nof_pending_tasks()), current_cpu_index_point, idle_sum});
-              if (log_buffer.size() >= BUFFER_SIZE) {
-                write_to_csv(log_file_name, log_buffer); // 写入 CSV 并清空缓冲区
-              }
-            }
+            // for (int i = 0; i < int(current_cpu_index_point); i++) {
+            //   long block_time = pusch_thread_state::getInstance().getBlockTime(i);
+            //   log_buffer.push_back(
+            //       {now, i, block_time, int(get_nof_pending_tasks()), current_cpu_index_point, idle_sum});
+            //   if (log_buffer.size() >= BUFFER_SIZE) {
+            //     write_to_csv(log_file_name, log_buffer); // 写入 CSV 并清空缓冲区
+            //   }
+            // }
 
             // 将队列为空的次数控制在 [F_min, F_max]
             if (idle_sum < F_min && current_cpu_index_point < nof_workers) {
@@ -185,7 +187,9 @@ public:
       if (!csv_file.is_open()) {
         throw std::runtime_error("Failed to open CSV file");
       }
-      csv_file << "timestamp,worker_id,task_block_time,queue_len,current_cpu_index_point,idle_sum_increase,"
+      // csv_file << "timestamp,worker_id,task_block_time,queue_len,current_cpu_index_point,idle_sum_increase,"
+      //             "idle_sum_decrease\n "; // 写入表头
+      csv_file << "timestamp,current_cpu_index_point,idle_sum_increase,"
                   "idle_sum_decrease\n "; // 写入表头
       csv_file.close();                   // 关闭文件，后续由 write_to_csv 以追加模式打开
 
@@ -275,16 +279,17 @@ public:
 
           // 记录日志
           if (log_duration >= log_frequency) {
-            for (int i = 0; i < int(current_cpu_index_point); i++) {
-              long block_time = dl_thread_state::getInstance().getBlockTime(i);
-              log_buffer.push_back({now,
-                                    i,
-                                    block_time,
-                                    int(get_nof_pending_tasks()),
-                                    current_cpu_index_point,
-                                    idle_sum_increase,
-                                    idle_sum_decrease});
-            }
+            log_buffer.push_back({now, current_cpu_index_point, idle_sum_increase, idle_sum_decrease});
+            // for (int i = 0; i < int(current_cpu_index_point); i++) {
+            //   long block_time = dl_thread_state::getInstance().getBlockTime(i);
+            //   log_buffer.push_back({now,
+            //                         i,
+            //                         block_time,
+            //                         int(get_nof_pending_tasks()),
+            //                         current_cpu_index_point,
+            //                         idle_sum_increase,
+            //                         idle_sum_decrease});
+            // }
             log_current = now;
           }
           if (log_buffer.size() >= BUFFER_SIZE) {
