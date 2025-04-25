@@ -199,31 +199,31 @@ public:
       if (!csv_file2.is_open()) {
         throw std::runtime_error("Failed to open CSV file");
       }
-      csv_file2 << "timestamp,duration\n";        // 写入表头
-      csv_file2.close();                          // 关闭文件，后续由 write_to_csv 以追加模式打开
-      const unsigned block_record_frequency = 2;  // 记录频率
-      const unsigned cpu_adjust_frequency   = 24; // CPU 调整频率
+      csv_file2 << "timestamp,duration\n";         // 写入表头
+      csv_file2.close();                           // 关闭文件，后续由 write_to_csv 以追加模式打开
+      const unsigned block_record_frequency = 500; // 记录频率
+      const unsigned cpu_adjust_frequency   = 24;  // CPU 调整频率
       // const unsigned cpu_adjust_frequency = 15; // CPU 调整频率
       // const unsigned cpu_reclaim_frequency  = 40000; // CPU 回收频率
       // const unsigned cpu_reclaim_frequency  = cpu_adjust_frequency * 1500; // CPU 回收频率，目前是36000us
       const unsigned cpu_reclaim_frequency = cpu_adjust_frequency * 500; // CPU 回收频率，目前是12000us
       // const unsigned cpu_increase_frequency = 400;                        // CPU 增加频率
-      const unsigned cpu_increase_frequency = cpu_adjust_frequency * 20; // CPU 增加频率
-      const unsigned log_frequency          = 2;                         // 日志记录频率
+      const unsigned cpu_increase_frequency = cpu_adjust_frequency * 200; // CPU 增加频率
+      const unsigned log_frequency          = 2;                          // 日志记录频率
 
       // 修改：将窗口分为两个不同的窗口，一个用于CPU增加，一个用于CPU减少
-      const unsigned window_size_increase = 500;  // CPU增加窗口大小
-      const unsigned window_size_decrease = 2300; // CPU减少窗口大小
+      // const unsigned window_size_increase = 500;  // CPU增加窗口大小
+      // const unsigned window_size_decrease = 2300; // CPU减少窗口大小
       // const unsigned window_size_increase = 21 * cpu_adjust_frequency; // CPU增加窗口大小
       // const unsigned window_size_decrease = 96 * cpu_adjust_frequency; // CPU减少窗口大小
-      // const unsigned window_size_increase = 500 * 0.7;  // CPU增加窗口大小
-      // const unsigned window_size_decrease = 2300 * 0.7; // CPU减少窗口大小
+      const unsigned window_size_increase = 500 * 1.2;  // CPU增加窗口大小
+      const unsigned window_size_decrease = 2300 * 1.2; // CPU减少窗口大小
       const unsigned num_records_increase = window_size_increase / block_record_frequency;
       const unsigned num_records_decrease = window_size_decrease / block_record_frequency;
 
       // 修改F_min和F_max分别只依赖于对应的窗口大小
       // F_min越大，说明越容易增加CPU，F_max越小，说明越容易减少CPU
-      unsigned F_min = 0.33 * window_size_increase;
+      unsigned F_min = 0.28 * window_size_increase;
       unsigned F_max = 0.45 * window_size_decrease;
       // unsigned F_min = 0.36 * window_size_increase;
       // unsigned F_max = 0.4 * window_size_decrease;
