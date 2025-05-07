@@ -175,6 +175,7 @@ public:
       auto     current                 = std::chrono::system_clock::now();
       auto     log_current             = std::chrono::system_clock::now();
       auto     event_current           = std::chrono::system_clock::now();
+      auto     debug_print_current     = std::chrono::system_clock::now();
       unsigned current_cpu_index_point = (nof_workers == 1 ? nof_workers : nof_workers / 2);
       // unsigned current_cpu_index_point = 4;
 
@@ -246,6 +247,8 @@ public:
       auto duration               = std::chrono::duration_cast<std::chrono::microseconds>(now - current).count();
       auto log_duration           = std::chrono::duration_cast<std::chrono::microseconds>(now - log_current).count();
       auto event_duration         = std::chrono::duration_cast<std::chrono::microseconds>(now - event_current).count();
+      auto debug_print_duration =
+          std::chrono::duration_cast<std::chrono::microseconds>(now - debug_print_current).count();
       while (!stop_flag.load(std::memory_order_relaxed)) {
         if (pool_name.find("up_phy_dl") != std::string::npos) {
           now = std::chrono::system_clock::now();
@@ -254,9 +257,17 @@ public:
           duration       = std::chrono::duration_cast<std::chrono::microseconds>(now - current).count();
           log_duration   = std::chrono::duration_cast<std::chrono::microseconds>(now - log_current).count();
           event_duration = std::chrono::duration_cast<std::chrono::microseconds>(now - event_current).count();
+          debug_print_duration =
+              std::chrono::duration_cast<std::chrono::microseconds>(now - debug_print_current).count();
           // fmt::print("duration: {}, log_duration: {}, event_duration: {}\n", duration, log_duration, event_duration);
 
-          // 每 2us 记录一次队列为空的次数
+          // 用于debug在终端输出控制频率
+          if (debug_print_duration >= 1000000) {
+            // fmt::print("old: {}\n", get_nof_pending_tasks());
+            // fmt::print("new: {}\n", nof_pending_tasks_new());
+            // fmt::print("old: {}\n", get_nof_pending_tasks());
+            debug_print_current = now;
+          }
           if (event_duration >= block_record_frequency) {
             if (get_nof_pending_tasks() == 0) {
               idle_count = 1;
@@ -321,6 +332,7 @@ public:
               if (std::chrono::duration_cast<std::chrono::microseconds>(increase_cpu_time - last_increase_cpu_time)
                       .count() > cpu_increase_frequency) {
                 last_increase_cpu_time = increase_cpu_time;
+                // fmt::print("[CPU↑] from {} to {}\n", current_cpu_index_point, current_cpu_index_point + 1);
                 wake_thread(current_cpu_index_point);
                 ++current_cpu_index_point;
               }
@@ -329,6 +341,7 @@ public:
               auto reclaim_cpu_time = std::chrono::system_clock::now();
               if (std::chrono::duration_cast<std::chrono::microseconds>(reclaim_cpu_time - last_reclaim_cpu_time)
                       .count() > cpu_reclaim_frequency) {
+                // fmt::print("[CPU↓] from {} to {}\n", current_cpu_index_point, current_cpu_index_point - 1);
                 last_reclaim_cpu_time = reclaim_cpu_time;
                 sleep_thread(--current_cpu_index_point);
               }
