@@ -278,7 +278,7 @@ public:
     check_loop = std::thread([this, check, thread_name]() {
       cpu_set_t cpuset;
       CPU_ZERO(&cpuset);
-      CPU_SET(10, &cpuset);
+      CPU_SET(65, &cpuset);
       pthread_t thread = pthread_self();
       pthread_setaffinity_np(thread, sizeof(cpu_set_t), &cpuset);
       pthread_setname_np(thread, ("scheduler_" + thread_name).c_str());
