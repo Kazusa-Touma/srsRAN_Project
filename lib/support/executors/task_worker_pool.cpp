@@ -42,9 +42,10 @@ detail::base_worker_pool::base_worker_pool(unsigned                             
     report_error_if_not(cpu_masks.size() == nof_workers_, "Wrong array of CPU masks provided");
   }
 
-  //unsigned actual_workers = nof_workers_ / 2 ? nof_workers_ / 2 : 1;
-  for(unsigned i = 0; i < nof_workers_; i++){
-    //is_yield.push_back(!(i >= actual_workers && (worker_pool_name.find("up_phy_dl") != std::string::npos || worker_pool_name.find("pusch") != std::string::npos)));
+  // unsigned actual_workers = nof_workers_ / 2 ? nof_workers_ / 2 : 1;
+  for (unsigned i = 0; i < nof_workers_; i++) {
+    // is_yield.push_back(!(i >= actual_workers && (worker_pool_name.find("up_phy_dl") != std::string::npos ||
+    // worker_pool_name.find("pusch") != std::string::npos)));
     is_yield.push_back(true);
     cv.emplace_back(new std::condition_variable());
     mtx.emplace_back(new std::mutex());
@@ -69,10 +70,11 @@ bool detail::base_worker_pool::is_in_thread_pool() const
                      [id = std::this_thread::get_id()](const unique_thread& t) { return t.get_id() == id; });
 }
 
-unsigned detail::base_worker_pool::update_id() {
+unsigned detail::base_worker_pool::update_id()
+{
   std::lock_guard<std::mutex> lock(incre_mutex);
   id++;
-  //fmt::print("update_id is called by <{}>, the current id is ---> {}\n", this->pool_name, id); 
+  // fmt::print("update_id is called by <{}>, the current id is ---> {}\n", this->pool_name, id);
   return id;
 }
 
@@ -184,10 +186,10 @@ template <concurrent_queue_policy QueuePolicy>
 void task_worker_pool<QueuePolicy>::stop()
 {
   DL_scheduler::getInstance().stop_flag.store(true);
-  if(this->check_loop.joinable()){
+  if (this->check_loop.joinable()) {
     this->check_loop.join();
   }
-  for(unsigned i = 0; i < this->nof_workers(); i++){
+  for (unsigned i = 0; i < this->nof_workers(); i++) {
     is_yield[i] = true;
   }
   unsigned count = 0;
@@ -205,50 +207,61 @@ template <concurrent_queue_policy QueuePolicy>
 std::function<void()> task_worker_pool<QueuePolicy>::create_pop_loop_task()
 {
   return [this]() {
-    const int index = this->update_id();
-    std::unique_lock <std::mutex> lck(*mtx[index - 1]);
-    fmt::print("Pool name:{} - ID in pop loop task is {}, yield state is {}\n", this->pool_name, index, this->is_yield[index - 1]);
+    const int                    index = this->update_id();
+    std::unique_lock<std::mutex> lck(*mtx[index - 1]);
+    fmt::print("Pool name:{} - ID in pop loop task is {}, yield state is {}\n",
+               this->pool_name,
+               index,
+               this->is_yield[index - 1]);
     unique_task job;
     while (true) {
-      while(!is_yield[index - 1]){
+      while (!is_yield[index - 1]) {
         cv[index - 1]->wait(lck);
       }
 
       if (not this->queue.pop_blocking(job)) {
         break;
       }
-      if(check_poolname()){
+      if (check_poolname()) {
         auto now = std::chrono::system_clock::now();
         job.set_processing_time(std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count());
       }
       job();
-      if(check_poolname()){
+      if (check_poolname()) {
         auto now = std::chrono::system_clock::now();
-        auto t = std::chrono::system_clock::to_time_t(now);
-        job.set_end_processing_time(std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count());
-        if(this->pool_name.find("up_phy_dl") != std::string::npos){
-          //std::lock_guard<std::mutex> lock(write_mutex);
-          dl_logfile_stream << std::put_time(std::localtime(&t), "%Y-%m-%d %H.%M.%S") << " " << "\ttask finished execution, " 
-          << "\twait time is " << job.get_processing_time() - job.get_in_queue_time() << "us, "
-          << "\texecute time is " << job.get_end_processing_time() - job.get_processing_time() << "us";
-          if(logger.debug.enabled()){
-            dl_logfile_stream << ", \tpush_task time is " << job.get_in_queue_time() << ", \ttask finished time is " << job.get_end_processing_time()
-            << "\tqueue length when pushing tasks is " << job.get_queue_length() << ", \tqueue length when finishing tasks is " << this->nof_pending_tasks();
+        auto t   = std::chrono::system_clock::to_time_t(now);
+        job.set_end_processing_time(
+            std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count());
+        if (this->pool_name.find("up_phy_dl") != std::string::npos) {
+          // std::lock_guard<std::mutex> lock(write_mutex);
+          dl_logfile_stream << std::put_time(std::localtime(&t), "%Y-%m-%d %H.%M.%S") << " "
+                            << "\ttask finished execution, "
+                            << "\twait time is " << job.get_processing_time() - job.get_in_queue_time() << "us, "
+                            << "\texecute time is " << job.get_end_processing_time() - job.get_processing_time()
+                            << "us";
+          if (logger.debug.enabled()) {
+            dl_logfile_stream << ", \tpush_task time is " << job.get_in_queue_time() << ", \ttask finished time is "
+                              << job.get_end_processing_time() << "\tqueue length when pushing tasks is "
+                              << job.get_queue_length() << ", \tqueue length when finishing tasks is "
+                              << this->nof_pending_tasks();
           }
           dl_logfile_stream << std::endl;
           dl_thread_state::getInstance().update_exec_time(job.get_end_processing_time() - job.get_processing_time());
           dl_thread_state::getInstance().update_wait_time(job.get_processing_time() - job.get_in_queue_time());
           dl_thread_state::getInstance().update_pop_time(job.get_processing_time());
           dl_thread_state::getInstance().update_length(this->nof_pending_tasks());
-        }
-        else{
-          //std::lock_guard<std::mutex> lock(write_mutex);
-          pusch_logfile_stream << std::put_time(std::localtime(&t), "%Y-%m-%d %H.%M.%S") << " " << "\ttask finished execution, " 
-          << "\twait time is " << job.get_processing_time() - job.get_in_queue_time() << "us, "
-          << "\texecute time is " << job.get_end_processing_time() - job.get_processing_time() << "us";
-          if(logger.debug.enabled()){
-            pusch_logfile_stream << ", \tpush_task time is " << job.get_in_queue_time() << ", \ttask finished time is " << job.get_end_processing_time()
-            << "\tqueue length when pushing tasks is " << job.get_queue_length() << ", \tqueue length when finishing tasks is " << this->nof_pending_tasks();
+        } else {
+          // std::lock_guard<std::mutex> lock(write_mutex);
+          pusch_logfile_stream << std::put_time(std::localtime(&t), "%Y-%m-%d %H.%M.%S") << " "
+                               << "\ttask finished execution, "
+                               << "\twait time is " << job.get_processing_time() - job.get_in_queue_time() << "us, "
+                               << "\texecute time is " << job.get_end_processing_time() - job.get_processing_time()
+                               << "us";
+          if (logger.debug.enabled()) {
+            pusch_logfile_stream << ", \tpush_task time is " << job.get_in_queue_time() << ", \ttask finished time is "
+                                 << job.get_end_processing_time() << "\tqueue length when pushing tasks is "
+                                 << job.get_queue_length() << ", \tqueue length when finishing tasks is "
+                                 << this->nof_pending_tasks();
           }
           pusch_logfile_stream << std::endl;
           pusch_thread_state::getInstance().update_exec_time(job.get_end_processing_time() - job.get_processing_time());
@@ -259,7 +272,6 @@ std::function<void()> task_worker_pool<QueuePolicy>::create_pop_loop_task()
       }
     }
   };
-
 }
 
 template <concurrent_queue_policy QueuePolicy>
@@ -315,15 +327,17 @@ void task_worker_pool<QueuePolicy>::wait_pending_tasks()
 template <concurrent_queue_policy QueuePolicy>
 void task_worker_pool<QueuePolicy>::thread_force_sleep(unsigned index)
 {
-  report_fatal_error_if_not(index < is_yield.size() && index >= 0, "Index of threads must be smaller than number of workers and greater than 0");
+  report_fatal_error_if_not(index < is_yield.size() && index >= 0,
+                            "Index of threads must be smaller than number of workers and greater than 0");
   is_yield[index] = is_yield[index] & false;
 }
 
 template <concurrent_queue_policy QueuePolicy>
 void task_worker_pool<QueuePolicy>::thread_force_wake(unsigned index)
 {
-  report_fatal_error_if_not(index < is_yield.size() && index >= 0, "Index of threads must be smaller than number of workers and greater than 0");
-  //std::unique_lock <std::mutex> lck(*(this->mtx[index]));
+  report_fatal_error_if_not(index < is_yield.size() && index >= 0,
+                            "Index of threads must be smaller than number of workers and greater than 0");
+  // std::unique_lock <std::mutex> lck(*(this->mtx[index]));
   is_yield[index] = is_yield[index] | true;
   this->cv[index]->notify_all();
 }

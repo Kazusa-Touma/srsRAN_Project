@@ -28,10 +28,10 @@
 #include "srsran/srsvec/bit.h"
 #include "srsran/srsvec/copy.h"
 #include "srsran/srsvec/zero.h"
-#include "srsran/support/timestamp_logger.h"
 #include "srsran/support/thread_state.h"
-#include <thread>
+#include "srsran/support/timestamp_logger.h"
 #include <chrono>
+#include <thread>
 
 using namespace srsran;
 
@@ -95,8 +95,9 @@ pusch_decoder_buffer& pusch_decoder_impl::new_data(span<uint8_t>                
                                                    pusch_decoder_notifier&             notifier,
                                                    const pusch_decoder::configuration& cfg)
 {
-  create_time = std::chrono::duration_cast<std::chrono::microseconds>(
-        std::chrono::system_clock::now().time_since_epoch()).count();
+  create_time =
+      std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch())
+          .count();
   internal_states previous_state = current_state.exchange(internal_states::collecting);
   srsran_assert(previous_state == internal_states::idle,
                 "Invalid state. It was expected to be {} but it was {}.",
@@ -446,11 +447,23 @@ void pusch_decoder_impl::join_and_notify()
   // Finally report decoding result.
   result_notifier->on_sch_data(stats);
 
-  //std::this_thread::sleep_for(std::chrono::microseconds(1000));
-  finish_time = std::chrono::duration_cast<std::chrono::microseconds>(
-        std::chrono::system_clock::now().time_since_epoch()).count();
-  TimestampLogger::getInstance().log_timestamp("PUSCH task Create_Time", create_time, "PUSCH task Finish_Time", finish_time);
+  // std::this_thread::sleep_for(std::chrono::microseconds(1000));
+  finish_time =
+      std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch())
+          .count();
+  TimestampLogger::getInstance().log_timestamp(
+      "PUSCH task Create_Time", create_time, "PUSCH task Finish_Time", finish_time);
   pusch_thread_state::getInstance().update_task_time(create_time, finish_time);
+
+  // 专门用来记录task的完整时间的数据
+  std::ofstream csv_file("ul_task_finished_time.csv", std::ios::out | std::ios::app);
+  if (!csv_file.is_open()) {
+    throw std::runtime_error("Failed to open CSV file");
+  }
+  auto noww       = std::chrono::system_clock::now();
+  auto time_stamp = std::chrono::duration_cast<std::chrono::microseconds>(noww.time_since_epoch()).count();
+  csv_file << time_stamp << "," << finish_time - create_time << "\n";
+  csv_file.flush(); // Ensure the data is written to disk
 
   // Transition back to idle.
   internal_states previous_state = current_state.exchange(internal_states::idle);

@@ -28,14 +28,15 @@
 #include "srsran/support/executors/detail/priority_task_queue.h"
 #include "srsran/support/executors/task_executor.h"
 #include "srsran/support/scheduler.h"
+#include "srsran/support/scheduler_zwh.h"
 #include "srsran/support/thread_state.h"
+#include <atomic>
 #include <condition_variable>
-#include <mutex>
-#include <fstream>
 #include <ctime>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
-#include <atomic>
+#include <mutex>
 #include <pthread.h>
 
 namespace srsran {
@@ -67,9 +68,7 @@ public:
 
   unsigned update_id();
 
-  unsigned get_id(){
-    return this->id;
-  }
+  unsigned get_id() { return this->id; }
 
   std::string pool_name;
 
@@ -204,30 +203,47 @@ public:
     detail::base_task_queue<QueuePolicy>(qsize_, wait_sleep_time),
     detail::base_worker_pool(nof_workers_, std::move(worker_pool_name), create_pop_loop_task(), prio, cpu_masks)
   {
-    if(this->pool_name.find("up_phy_dl") != std::string::npos){
+    if (this->pool_name.find("up_phy_dl") != std::string::npos) {
       dl_logfile_stream.open("dl_result_DL.txt", std::ios::out);
-      startThread(DL_scheduler::getInstance().check_status(
-        this->nof_workers(),
-        [this](unsigned i) { this->thread_force_sleep(i); },
-        [this](unsigned i) { this->thread_force_wake(i); }
-      ), "DL sched");
-    }
-    else if(this->pool_name.find("pusch") != std::string::npos){
+      // startThread(DL_scheduler::getInstance().check_status(
+      //                 this->nof_workers(),
+      //                 [this](unsigned i) { this->thread_force_sleep(i); },
+      //                 [this](unsigned i) { this->thread_force_wake(i); }),
+      //             "DL sched");
+      startThread(scheduler_zwh::getInstance().DL_control<srsran::concurrent_queue_policy::locking_mpmc>(
+                      this->nof_workers(),
+                      [this](unsigned i) -> void { this->thread_force_sleep(i); },
+                      [this](unsigned i) -> void { this->thread_force_wake(i); },
+                      [this](void) -> unsigned { return this->nof_pending_tasks(); },
+                      this->pool_name),
+                  "DL_control");
+    } else if (this->pool_name.find("pusch") != std::string::npos) {
       pusch_logfile_stream.open("pusch_result_UL.txt", std::ios::out);
-      //startThread(check_status(), "PUSCH");
+      // startThread(check_status(), "PUSCH");
+      // startThread(scheduler_zwh::getInstance().UL_control<srsran::concurrent_queue_policy::locking_mpmc>(
+      //                 this->nof_workers(),
+      //                 [this](unsigned i) -> void { this->thread_force_sleep(i); },
+      //                 [this](unsigned i) -> void { this->thread_force_wake(i); },
+      //                 [this](void) -> unsigned { return this->nof_pending_tasks(); },
+      //                 this->pool_name),
+      //             "UL_control");
+      // startThread(check_status(), "PUSCH");
     }
-  } 
+  }
   ~task_worker_pool();
 
-  bool check_poolname() { return this->pool_name.find("up_phy_dl") != std::string::npos 
-                        || this->pool_name.find("pusch") != std::string::npos; }
+  bool check_poolname()
+  {
+    return this->pool_name.find("up_phy_dl") != std::string::npos || this->pool_name.find("pusch") != std::string::npos;
+  }
 
   /// \brief Push a new task to be processed by the worker pool. If the task queue is full, it skips the task and
   /// return false.
   /// \param task Task to be run in the thread pool.
   /// \return True if task was successfully enqueued to be processed. False, if task queue is full.
-  SRSRAN_NODISCARD bool push_task(unique_task task) {
-    if(check_poolname()){
+  SRSRAN_NODISCARD bool push_task(unique_task task)
+  {
+    if (check_poolname()) {
       auto now = std::chrono::system_clock::now();
       task.set_in_queue_time(std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count());
       task.set_queue_length(this->nof_pending_tasks());
@@ -257,18 +273,19 @@ public:
 
   void thread_force_wake(unsigned index);
 
-  void startThread(const std::function<void()>& check, const std::string& thread_name){
-    check_loop = std::thread([this, check, thread_name](){
+  void startThread(const std::function<void()>& check, const std::string& thread_name)
+  {
+    check_loop = std::thread([this, check, thread_name]() {
       cpu_set_t cpuset;
       CPU_ZERO(&cpuset);
-      CPU_SET(10, &cpuset);
+      CPU_SET(65, &cpuset);
       pthread_t thread = pthread_self();
       pthread_setaffinity_np(thread, sizeof(cpu_set_t), &cpuset);
       pthread_setname_np(thread, ("scheduler_" + thread_name).c_str());
 
       // 设置线程优先级
       struct sched_param param;
-      param.sched_priority = 95; // 设置所需的优先级
+      param.sched_priority = 95;                         // 设置所需的优先级
       pthread_setschedparam(thread, SCHED_FIFO, &param); // 使用实时调度策略
 
       check();
@@ -280,7 +297,7 @@ public:
   std::fstream pusch_logfile_stream;
 
   std::thread check_loop;
-  std::mutex write_mutex;
+  std::mutex  write_mutex;
 
 private:
   std::function<void()> create_pop_loop_task();
