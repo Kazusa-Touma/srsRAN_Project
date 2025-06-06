@@ -217,7 +217,7 @@ public:
       // const unsigned window_size_decrease = 2300; // CPU减少窗口大小
       // const unsigned window_size_increase = 21 * cpu_adjust_frequency; // CPU增加窗口大小
       // const unsigned window_size_decrease = 96 * cpu_adjust_frequency; // CPU减少窗口大小
-      const unsigned window_size_increase = 500 * 1.34; // CPU增加窗口大小
+      const unsigned window_size_increase = 500 * 1.33; // CPU增加窗口大小
       const unsigned window_size_decrease = 2300 * 1.2; // CPU减少窗口大小
       const unsigned num_records_increase = window_size_increase / block_record_frequency;
       const unsigned num_records_decrease = window_size_decrease / block_record_frequency;
@@ -304,7 +304,7 @@ public:
             // }
             log_current = now;
           }
-          if (log_buffer.size() >= BUFFER_SIZE) {
+          if (log_buffer.size() >= BUFFER_SIZE && is_log2file) {
             // 使用 std::async 异步调用文件写入操作
             std::async(std::launch::async, [log_file_name, log_buffer_copy = std::vector<LogEntry>(log_buffer)]() {
               write_to_csv(log_file_name, log_buffer_copy); // 异步写入 CSV
@@ -352,7 +352,7 @@ public:
         }
       }
 
-      if (!log_buffer.empty()) {
+      if (!log_buffer.empty() && is_log2file) {
         // 使用 std::async 异步调用文件写入操作
         std::async(std::launch::async, [log_file_name, log_buffer_copy = std::vector<LogEntry>(log_buffer)]() {
           write_to_csv(log_file_name, log_buffer_copy); // 异步写入 CSV
@@ -363,6 +363,7 @@ public:
   }
 
   std::atomic<bool> stop_flag;
+  const bool        is_log2file = true;
 };
 
 } // namespace srsran
