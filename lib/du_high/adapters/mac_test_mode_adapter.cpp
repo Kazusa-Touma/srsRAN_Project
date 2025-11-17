@@ -75,6 +75,7 @@ public:
   }
 
   unsigned on_buffer_state_update() override { return buffer_size_container->get_buffer_size();}
+  double on_buffer_state_update_() override { return buffer_size_container->get_buffer_size();}
 
 private:
   byte_buffer tx_sdu = {};

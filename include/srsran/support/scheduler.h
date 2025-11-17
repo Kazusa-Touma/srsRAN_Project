@@ -11,108 +11,94 @@
 #include <mutex>
 #include <thread>
 #include <vector>
-
-// If a high-criticality job 𝐽𝑖 does not complete within its virtual deadline 𝐷′,
-// the system transitions into the critical-state. All low-criticality jobs can be abandoned
-// and future jobs of low-criticality tasks need not be admitted.
-// The scheduler now executes all jobs according to their critical-state mapping 𝑆.
-// That is, all high-utilization tasks are now allocated 𝑛 dedicated cores and
-// scheduled using a work-conserving scheduler.
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <semaphore.h>
+#include <boost/filesystem.hpp>
 
 namespace srsran {
 
-class DL_scheduler
-{
+class CPU_controller{
 public:
-  static DL_scheduler& getInstance()
+  std::atomic<bool> stop_flag;
+
+  static CPU_controller& getInstance()
   {
-    static DL_scheduler instance;
+    static CPU_controller instance;
     return instance;
   }
 
-  std::function<void()> check_status(unsigned                      nof_workers,
-                                     std::function<void(unsigned)> wake_thread,
-                                     std::function<void(unsigned)> sleep_thread)
+  void update_feature(std::vector<double> feature_)
   {
-    return [this, nof_workers, sleep_thread, wake_thread]() {
-      std::ofstream csv_file("task log.csv", std::ios::out);
-      csv_file << "timestamp,core_num,num1,num2,start_point\n";
+    for(int i = 0; i < 8; i++){
+      feature[i] = feature_[i];
+    }
+  }
+
+  void insert_bs(unsigned int bs)
+  {
+    feature[8] = static_cast<double>(bs);
+    transmit_flag.store(true);
+  }
+
+  std::function<void()> check_status(unsigned nof_workers)
+  {
+    return [this, nof_workers]() {
+      // std::ofstream csv_file("task log.csv", std::ios::out);
+      // csv_file << "timestamp,core_num,num1,num2,start_point\n";
+      sem_t* sem_ready = sem_open(SEM_READY_NAME, O_CREAT, 0666, 0);
+      sem_t* sem_done = sem_open(SEM_DONE_NAME, O_CREAT, 0666, 0);
+      
+      // 创建共享内存
+      int shm_fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0666);
+      ftruncate(shm_fd, SHM_SIZE);
+      double* shared_data = static_cast<double*>(mmap(0, SHM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0));
+      
       while (!stop_flag.load(std::memory_order_relaxed)) {
-        std::this_thread::sleep_for(std::chrono::microseconds(20));
-        auto now =
-            std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch())
-                .count();
-        if (sched_flag.load()) {
-          double   DL_WCET    = pred->DL_predict(feature);
-          double   PDSCH_WCET = pred->PDSCH_predict(feature);
-          unsigned core_num   = std::max(std::max(int(std::ceil(DL_WCET / 500)), 1),
-                                       int(std::ceil((DL_WCET - PDSCH_WCET) / (292.9 - PDSCH_WCET))));
-          core_num            = std::min(core_num, nof_workers);
-          csv_file << now << "," << core_num << "," << DL_WCET << ","
-                   << std::ceil((DL_WCET - PDSCH_WCET) / (292.9 - PDSCH_WCET)) << "," << sched_pt << std::endl;
-          sched_flag.store(false);
-          if (core_num < last_core_num) {
-            for (unsigned i = core_num + 1; i <= last_core_num; i++) {
-              sleep_thread(i - 1);
-            }
-          } else if (core_num > last_core_num) {
-            for (unsigned i = last_core_num + 1; i <= core_num; i++) {
-              wake_thread(i - 1);
-            }
-          } else {
-            continue;
+        std::this_thread::sleep_for(std::chrono::microseconds(50));
+        if(transmit_flag.load()){
+          for(int i = pos * 9; i < (pos + 1) * 9; i++){
+            shared_data[i] = feature[i - pos * 9];
+            std::cout << feature[i - pos * 9] << " ";
           }
-          last_core_num = core_num;
-        } else {
-          if (now - sched_pt > 292.9 && !is_finished.load() && last_core_num < nof_workers) {
-            for (unsigned i = last_core_num + 1; i <= nof_workers; i++) {
-              wake_thread(i - 1);
-            }
-            last_core_num = nof_workers;
-            csv_file << now << "," << last_core_num << "," << -100 << "," << -100 << "," << sched_pt << std::endl;
-          }
+          std::cout << "\n";
+          shared_data[ARRAY_SIZE] = pos;
+          pos = (pos + 1) % 50;
+          transmit_flag.store(false);
         }
+        sem_post(sem_ready);
       }
+      munmap(shared_data, SHM_SIZE);
+      close(shm_fd);
+      shm_unlink(SHM_NAME);
+      sem_close(sem_ready);
+      sem_close(sem_done);
+      sem_unlink(SEM_READY_NAME);
+      sem_unlink(SEM_DONE_NAME);
     };
   }
 
-  void start_schedule(std::vector<double> feature_)
-  {
-    sched_pt =
-        std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch())
-            .count();
-    feature = feature_;
-    sched_flag.store(true);
-    is_finished.store(false);
-  }
-
-  void DL_update(double cost)
-  {
-    pred->DL_online_update(feature, cost);
-    is_finished.store(true);
-  }
-
-  void PDSCH_update(double cost) { pred->PDSCH_online_update(feature, cost); }
-
-  std::atomic<bool>   stop_flag;
-  std::atomic<bool>   sched_flag{false};
-  std::atomic<bool>   is_finished{false};
-  long                sched_pt;
-  unsigned            last_core_num = 8;
-  std::mutex          feature_mtx;
-  std::vector<double> feature;
-
 private:
-  DL_scheduler()
+  int pos, cnt;
+  std::vector<double> feature;
+  std::atomic<bool> sched_flag;
+  std::atomic<bool> transmit_flag;
+
+  CPU_controller()
   {
-    pred    = std::make_unique<predictor>();
-    feature = {0, 0, 0, 0, 0, 0, 0, 0};
+    feature = std::vector<double>(9, 0);
+    pos = 0;
     stop_flag.store(false);
+    transmit_flag.store(false);
   }
 
-  ~DL_scheduler() { stop_flag.store(true); }
-
-  std::unique_ptr<predictor> pred;
+  const char* SHM_NAME = "/cpp_py_array";
+  const char* SEM_READY_NAME = "/cpp_py_sem_ready";
+  const char* SEM_DONE_NAME = "/cpp_py_sem_done";
+  const size_t ARRAY_SIZE = 450;  // 数组大小
+  const size_t SHM_SIZE = sizeof(double) * (ARRAY_SIZE + 1);  // 数组+返回值
 };
 
 } // namespace srsran

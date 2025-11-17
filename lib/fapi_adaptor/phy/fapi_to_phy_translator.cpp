@@ -36,7 +36,7 @@
 #include "srsran/phy/upper/uplink_request_processor.h"
 #include "srsran/phy/upper/uplink_slot_pdu_repository.h"
 #include "srsran/support/timestamp_logger.h"
-#include "srsran/support/scheduler.h"
+#include "srsran/support/scheduler_zwh.h"
 #include <regex>
 
 using namespace srsran;
@@ -332,11 +332,16 @@ void fapi_to_phy_translator::dl_tti_request(const fapi::dl_tti_request_message& 
   }
 
   if(!pdus.value().pdsch.empty()){
-    std::vector<double> feature;
-    feature.emplace_back(pdus.value().pdsch[0].rnti);
+    std::vector<float> feature;
     if(pdus.value().pdsch[0].context.has_value()){
       feature.emplace_back(pdus.value().pdsch[0].context.value().get_h_id());
       feature.emplace_back(pdus.value().pdsch[0].context.value().get_k1());
+    }
+    else{
+      if(pdus.value().pdsch.size() > 1 && pdus.value().pdsch[1].context.has_value()){
+        feature.emplace_back(pdus.value().pdsch[1].context.value().get_h_id());
+        feature.emplace_back(pdus.value().pdsch[1].context.value().get_k1());
+      }
     }
     std::string alloc = fmt::format("{}", pdus.value().pdsch[0].freq_alloc);
     std::regex regex("\\d+");
@@ -362,11 +367,9 @@ void fapi_to_phy_translator::dl_tti_request(const fapi::dl_tti_request_message& 
     if(!msg.pdus.empty() && !msg.pdus[0].pdsch_pdu.cws.empty()){
       feature.emplace_back(msg.pdus[0].pdsch_pdu.cws[0].tb_size.value());
     }
-
-    // for(auto &i: feature){
-    //   TimestampLogger::getInstance().log_timestamp(i);
-    // }
-    DL_scheduler::getInstance().start_schedule(feature);
+    if(feature.size() == 7){
+      scheduler_zwh::getInstance().update_feature(feature);
+    }
   }
   
   // Process the PDUs.

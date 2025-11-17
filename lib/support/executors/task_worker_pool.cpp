@@ -185,7 +185,7 @@ task_worker_pool<QueuePolicy>::~task_worker_pool()
 template <concurrent_queue_policy QueuePolicy>
 void task_worker_pool<QueuePolicy>::stop()
 {
-  DL_scheduler::getInstance().stop_flag.store(true);
+  scheduler_zwh::getInstance().stop_flag.store(true);
   if (this->check_loop.joinable()) {
     this->check_loop.join();
   }

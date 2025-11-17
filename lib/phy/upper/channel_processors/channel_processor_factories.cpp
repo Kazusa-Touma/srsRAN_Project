@@ -1164,7 +1164,7 @@ private:
                     data.size(),
                     time_ns);
       }
-      DL_scheduler::getInstance().PDSCH_update(time_ns.count() / 1000);
+      //DL_scheduler::getInstance().PDSCH_update(time_ns.count() / 1000);
       TimestampLogger::getInstance().log_timestamp("PDSCH create time", 
           std::chrono::duration_cast<std::chrono::microseconds>(start.time_since_epoch()).count(), 
           "PDSCH finish time", 

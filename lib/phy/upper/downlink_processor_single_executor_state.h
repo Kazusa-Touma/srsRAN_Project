@@ -109,7 +109,7 @@ public:
       finish_time =
           std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch())
               .count();
-      DL_scheduler::getInstance().DL_update(finish_time - create_time);
+      //DL_scheduler::getInstance().DL_update(finish_time - create_time);
       // 同时记录开始和结束时间戳
       TimestampLogger::getInstance().log_timestamp(
           "DL task Create_Time", create_time, "DL task Finish_Time", finish_time);

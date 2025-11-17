@@ -26,7 +26,7 @@
 #include "srsran/ran/pdsch/pdsch_constants.h"
 #include "srsran/support/async/execute_on.h"
 #include "srsran/support/timestamp_logger.h"
-#include "srsran/support/scheduler.h"
+#include "srsran/support/scheduler_zwh.h"
 
 using namespace srsran;
 
@@ -387,9 +387,12 @@ void mac_cell_processor::update_logical_channel_dl_buffer_states(const dl_sched_
           mac_sdu_tx_builder* bearer = ue_mng.get_lc_sdu_builder(grant.pdsch_cfg.rnti, lc_info.lcid.to_lcid());
           srsran_sanity_check(bearer != nullptr, "Scheduler is allocating inexistent bearers");
 
+          // TimestampLogger::getInstance().log_timestamp_("bs updated", bearer->on_buffer_state_update());
+          auto bs_update = bearer->on_buffer_state_update_();
+          scheduler_zwh::getInstance().insert_bs(bs_update);
           // Update DL buffer state for the allocated logical channel.
           mac_dl_buffer_state_indication_message bs{
-              ue_mng.get_ue_index(grant.pdsch_cfg.rnti), lc_info.lcid.to_lcid(), bearer->on_buffer_state_update()};
+              ue_mng.get_ue_index(grant.pdsch_cfg.rnti), lc_info.lcid.to_lcid(), (unsigned)bs_update};
           sched.handle_dl_buffer_state_update(bs);
         }
       }

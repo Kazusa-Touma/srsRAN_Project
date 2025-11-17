@@ -27,7 +27,6 @@
 #include "srsran/adt/mutexed_mpmc_queue.h"
 #include "srsran/support/executors/detail/priority_task_queue.h"
 #include "srsran/support/executors/task_executor.h"
-#include "srsran/support/scheduler.h"
 #include "srsran/support/scheduler_zwh.h"
 #include "srsran/support/thread_state.h"
 #include <atomic>
@@ -182,6 +181,8 @@ private:
   srslog::basic_logger& logger = srslog::fetch_basic_logger("ALL");
 };
 
+class scheduler_zwh;
+
 /// \brief Simple pool of task workers/threads. The workers share the same queue of task and do not perform
 /// work-stealing.
 template <concurrent_queue_policy QueuePolicy = concurrent_queue_policy::lockfree_mpmc>
@@ -205,12 +206,7 @@ public:
   {
     if (this->pool_name.find("up_phy_dl") != std::string::npos) {
       dl_logfile_stream.open("dl_result_DL.txt", std::ios::out);
-      // startThread(DL_scheduler::getInstance().check_status(
-      //                 this->nof_workers(),
-      //                 [this](unsigned i) { this->thread_force_sleep(i); },
-      //                 [this](unsigned i) { this->thread_force_wake(i); }),
-      //             "DL sched");
-      startThread(scheduler_zwh::getInstance().DL_control<srsran::concurrent_queue_policy::locking_mpmc>(
+      startThread(scheduler_zwh::getInstance().DL_control(
                       this->nof_workers(),
                       [this](unsigned i) -> void { this->thread_force_sleep(i); },
                       [this](unsigned i) -> void { this->thread_force_wake(i); },
@@ -219,15 +215,6 @@ public:
                   "DL_control");
     } else if (this->pool_name.find("pusch") != std::string::npos) {
       pusch_logfile_stream.open("pusch_result_UL.txt", std::ios::out);
-      // startThread(check_status(), "PUSCH");
-      // startThread(scheduler_zwh::getInstance().UL_control<srsran::concurrent_queue_policy::locking_mpmc>(
-      //                 this->nof_workers(),
-      //                 [this](unsigned i) -> void { this->thread_force_sleep(i); },
-      //                 [this](unsigned i) -> void { this->thread_force_wake(i); },
-      //                 [this](void) -> unsigned { return this->nof_pending_tasks(); },
-      //                 this->pool_name),
-      //             "UL_control");
-      // startThread(check_status(), "PUSCH");
     }
   }
   ~task_worker_pool();

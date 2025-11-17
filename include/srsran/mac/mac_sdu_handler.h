@@ -29,6 +29,9 @@ public:
 
   /// Called by MAC to obtain the DL BSR  for the respective logical channel.
   virtual unsigned on_buffer_state_update() = 0;
+  virtual double on_buffer_state_update_(){
+    return 0.0;
+  }
 };
 
 } // namespace srsran

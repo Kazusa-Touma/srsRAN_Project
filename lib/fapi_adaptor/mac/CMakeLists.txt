@@ -23,6 +23,15 @@ add_subdirectory(messages)
 add_library(srsran_mac_to_fapi_translator STATIC mac_to_fapi_translator.cpp)
 target_link_libraries(srsran_mac_to_fapi_translator srsran_mac_fapi_adaptors srsran_fapi_precoding_matrix_tools srsran_fapi)
 
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+find_library(STDCXXFS_LIBRARY stdc++fs)
+if(STDCXXFS_LIBRARY)
+        target_link_libraries(your_project_name PRIVATE ${STDCXXFS_LIBRARY})
+else()
+        message(STATUS "stdc++fs not found - not linking")
+endif()
 
 set(SOURCES
         fapi_to_mac_data_msg_translator.cpp
